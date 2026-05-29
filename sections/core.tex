@@ -11,16 +11,17 @@
 \subsection{Accidents Waiting to Happen -- HDF5 Safety}
 
 \begin{itemize}
-    \item Disk full
-    \item File corruption
-    \item Long term data accessibility and interpretability
+    \item Disk full~\cite{forum-11714}
+    \item File corruption~\cite{forum-file-corruption}
+    \item Long-term data accessibility and interpretability, see section~\ref{sec:long-haul}
 \end{itemize}
 
 \subsection{Verify and Verify -- HDF5 Security}
 
 \begin{itemize}
     \item Integer arithmetic
-    \item Running with scissors
+    \item File format parsing issues
+    \item Malicious plugins, see section~\ref{sec:extensions}
 \end{itemize}
 
 \subsection{Footprints, Fingerprints, Controls -- HDF5 Privacy}
@@ -32,6 +33,8 @@
 \end{itemize}
 
 \subsection{HDF5 Tools}
+
+Not strictly part of the core library, but the tools are an important part of the ecosystem and have their own set of issues.
 
 \subsection{Audit Findings and Mitigation Priorities}
 

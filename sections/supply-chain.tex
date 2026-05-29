@@ -13,6 +13,536 @@
     \item SBOM
 \end{itemize}
 
+\subsection{Upstream Dependencies}
+
+\providecommand{\depcode}[1]{\nolinkurl{#1}}
+
+This subsection summarizes external software that can be required by an HDF5
+build. It is organized by build option, because the default serial C library has
+a much smaller dependency set than feature-complete, testing, packaging, or
+developer builds.
+
+\subsubsection{Dependency Source Modes}
+
+HDF5's CMake build can either locate dependencies that are already installed or,
+for selected filter-related projects, add external source trees to the build with
+\depcode{FetchContent}.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.19\linewidth}p{0.34\linewidth}p{0.38\linewidth}@{}}
+\hline
+\textbf{Mode} & \textbf{Relevant options} & \textbf{Meaning} \\
+\hline
+System packages & \depcode{HDF5_ALLOW_EXTERNAL_SUPPORT=NO} &
+CMake uses \depcode{find_package()}, \depcode{find_library()}, or
+\depcode{find_program()} to locate installed dependencies. This is the default. \\
+Git fetch & \depcode{HDF5_ALLOW_EXTERNAL_SUPPORT=GIT} plus a
+dependency-specific \depcode{*_USE_EXTERNAL=ON} option &
+CMake downloads source from the configured \depcode{*_GIT_URL} and
+\depcode{*_GIT_TAG} values and builds it with HDF5. \\
+Tarball fetch & \depcode{HDF5_ALLOW_EXTERNAL_SUPPORT=TGZ} plus a
+dependency-specific \depcode{*_USE_EXTERNAL=ON} option &
+CMake downloads from \depcode{*_TGZ_ORIGPATH} and \depcode{*_TGZ_NAME}, or uses
+\depcode{TGZPATH} when the dependency-specific \depcode{*_USE_LOCALCONTENT=ON}
+option is set. \\
+\hline
+\end{longtable}
+\endgroup
+
+The \depcode{HDF5_ALLOW_EXTERNAL_SUPPORT} modes apply to filter-related
+dependencies. Some test and example configurations have their own source-fetch
+paths, such as KWSys for the API test driver and h5py for Python examples. MPI,
+HDFS, ROS3, OpenSSL, Java, documentation, packaging, and developer tools must be
+provided by the build environment.
+
+\subsubsection{Baseline Build}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.24\linewidth}p{0.22\linewidth}p{0.45\linewidth}@{}}
+\hline
+\textbf{Dependency} & \textbf{Trigger} & \textbf{Notes} \\
+\hline
+CMake 3.26 or newer & Always &
+Required by the top-level \depcode{cmake_minimum_required()}. \\
+C compiler and native build tool & Always &
+The top-level project is a C project. \\
+Platform C library, headers, and system calls & Always &
+CMake probes standard headers, types, functions, byte order, large-file support,
+file locking, \depcode{pread}/\depcode{pwrite}, and related platform features. \\
+Platform link libraries & Platform-dependent &
+CMake adds libraries only when probes show they are needed: \depcode{m},
+\depcode{dl}, \depcode{rt}, \depcode{posix4}, \depcode{ucb}, \depcode{ws2_32},
+\depcode{wsock32}, and \depcode{shlwapi}. \\
+PkgConfig & Optional probe &
+Used only when available. It can help some find modules, such as zlib-ng and
+libaec, but it is not a hard requirement for the default build. \\
+Threads & Found in every configure; required by thread features &
+CMake searches for C11 threads, Win32 threads, or pthreads. When found, HDF5
+records thread support and links \depcode{Threads::Threads};
+\depcode{HDF5_ENABLE_THREADSAFE}, \depcode{HDF5_ENABLE_CONCURRENCY}, and
+\depcode{HDF5_ENABLE_SUBFILING_VFD} require it. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{Feature Dependencies}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.20\linewidth}p{0.27\linewidth}p{0.20\linewidth}p{0.24\linewidth}@{}}
+\hline
+\textbf{Feature or component} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Parallel HDF5 & \depcode{HDF5_ENABLE_PARALLEL=ON} &
+MPI C with MPI-IO, MPI standard 3.0 or newer &
+Adds \depcode{MPI::MPI_C} to public link libraries. Parallel filtered writes and
+large parallel I/O are enabled only when the required MPI symbols are present.
+Parallel tests also need an MPI launcher such as \depcode{mpiexec}. \\
+Parallel Fortran & \depcode{HDF5_ENABLE_PARALLEL=ON},
+\depcode{HDF5_BUILD_FORTRAN=ON} &
+MPI Fortran &
+The Fortran build adds MPI Fortran libraries. The \depcode{mpi_f08} module is
+used when available. \\
+Thread-safe library & \depcode{HDF5_ENABLE_THREADSAFE=ON} &
+Threads &
+Unsupported with parallel, Fortran, C++, or high-level library unless
+\depcode{HDF5_ALLOW_UNSUPPORTED=ON}. On Windows, static libraries are rejected. \\
+Multi-threaded concurrency & \depcode{HDF5_ENABLE_CONCURRENCY=ON} &
+Threads &
+Experimental. Mutually exclusive with \depcode{HDF5_ENABLE_THREADSAFE}; has the
+same unsupported combinations as thread-safety unless overridden with
+\depcode{HDF5_ALLOW_UNSUPPORTED=ON}. \\
+C++ wrappers & \depcode{HDF5_BUILD_CPP_LIB=ON} &
+C++ compiler &
+Unsupported with parallel unless \depcode{HDF5_ALLOW_UNSUPPORTED=ON}.
+High-level C++ wrappers also require \depcode{HDF5_BUILD_HL_LIB=ON}. \\
+Fortran wrappers & \depcode{HDF5_BUILD_FORTRAN=ON} &
+Fortran compiler with Fortran 2003 \depcode{ISO_C_BINDING} support &
+Unsupported with thread-safety or concurrency unless
+\depcode{HDF5_ALLOW_UNSUPPORTED=ON}. High-level Fortran wrappers also require
+\depcode{HDF5_BUILD_HL_LIB=ON}. \\
+Java wrappers & \depcode{HDF5_BUILD_JAVA=ON} &
+Java/JDK, shared HDF5 libraries, Java dependency JARs &
+Java requires shared HDF5 libraries. Java 11 or newer is required for the JNI
+implementation. Java tests additionally require the JUnit and Hamcrest JARs. \\
+Java JNI implementation & \depcode{HDF5_BUILD_JAVA=ON},
+\depcode{HDF5_ENABLE_JNI=ON}, or any Java version earlier than 25 &
+JNI headers and libraries &
+JNI is the default Java implementation. HDFS also requires JNI. \\
+Java FFM implementation & \depcode{HDF5_BUILD_JAVA=ON}, Java 25 or newer,
+\depcode{HDF5_ENABLE_JNI=OFF} &
+\depcode{jextract} from \depcode{JEXTRACT_HOME/bin} or \depcode{JAVA_HOME/bin} &
+Generates FFM bindings at configure time. \\
+Java logging/test JARs & \depcode{HDF5_BUILD_JAVA=ON} &
+\depcode{slf4j-api}, \depcode{slf4j-nop}, \depcode{slf4j-simple}; plus JUnit 4
+and Hamcrest for tests &
+The default paths point to bundled JARs under \depcode{java/lib}. They can be
+overridden with \depcode{HDF5_JAVA_*_JAR} cache variables.
+\depcode{HDF5_ENABLE_MAVEN_DEPLOY=ON} generates Maven-style artifacts and POM
+files; the CMake build does not locate or run \depcode{mvn}. \\
+Documentation & \depcode{HDF5_BUILD_DOC=ON} &
+Doxygen &
+\depcode{HDF5_ENABLE_DOXY_WARNINGS=ON} makes Doxygen warnings fail the build. \\
+Header regeneration & \depcode{HDF5_GENERATE_HEADERS=ON} &
+Perl &
+Perl is optional otherwise. If it is missing, generated headers are not
+regenerated. \\
+Python examples & \depcode{H5EXAMPLE_BUILD_PYTHON=ON} &
+Python3 interpreter, Python development files, NumPy, h5py source, pip &
+The examples CMake project fetches \depcode{h5py} from Git and installs it with
+\texttt{python3 -m pip}. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{Filter Dependencies}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.19\linewidth}p{0.28\linewidth}p{0.22\linewidth}p{0.22\linewidth}@{}}
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Source choices} \\
+\hline
+DEFLATE filter & \depcode{HDF5_ENABLE_ZLIB_SUPPORT=ON},
+\depcode{HDF5_USE_ZLIB_NG=OFF} &
+zlib &
+System package by default; \depcode{ZLIB_USE_EXTERNAL=ON} can build zlib from
+Git or TGZ. \depcode{HDF5_USE_ZLIB_STATIC=ON} prefers a static library. \\
+DEFLATE filter through zlib-ng & \depcode{HDF5_ENABLE_ZLIB_SUPPORT=ON},
+\depcode{HDF5_USE_ZLIB_NG=ON} &
+zlib-ng &
+System package by default; \depcode{ZLIB_USE_EXTERNAL=ON} can build zlib-ng from
+Git or TGZ. zlib compatibility mode is detected. \\
+SZIP filter & \depcode{HDF5_ENABLE_SZIP_SUPPORT=ON} &
+libaec with libsz compatibility, or another package selected by
+\depcode{LIBAEC_PACKAGE_NAME} &
+System package by default; \depcode{SZIP_USE_EXTERNAL=ON} can build libaec from
+Git or TGZ. \depcode{HDF5_USE_LIBAEC_STATIC=ON} prefers static libraries. \\
+HDF5 filter plugins project & \depcode{HDF5_ENABLE_PLUGIN_SUPPORT=ON} &
+Installed \depcode{h5pl}/HDF5 filter plugins package, or the
+\depcode{hdf5_plugins} project &
+\depcode{PLUGIN_USE_EXTERNAL=ON} can build the plugin project from Git or TGZ.
+Plugin support is disabled for the 1.6 API. \\
+\hline
+\end{longtable}
+\endgroup
+
+The plugin project can introduce additional filter-library dependencies. The
+HDF5 cache defaults include entries for bitgroom, bitround, bitshuffle, Blosc,
+Blosc2, bzip2, fpzip, JPEG, LZ4, LZF, SZ, ZFP, and Zstandard. Those libraries
+are controlled by the plugin project's own options when \depcode{hdf5_plugins}
+is built or found.
+
+\subsubsection{Virtual File Drivers and External Connectors}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.19\linewidth}p{0.28\linewidth}p{0.22\linewidth}p{0.22\linewidth}@{}}
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Direct VFD & \depcode{HDF5_ENABLE_DIRECT_VFD=ON} &
+POSIX \depcode{O_DIRECT} and \depcode{posix_memalign()} support &
+No third-party library. Configuration fails if the platform support is missing. \\
+Mirror VFD & \depcode{HDF5_ENABLE_MIRROR_VFD=ON} &
+POSIX socket/fork headers and functions &
+No third-party library. Requires \depcode{netinet/in.h}, \depcode{netdb.h},
+\depcode{arpa/inet.h}, \depcode{sys/socket.h}, and \depcode{fork()}. \\
+ROS3 VFD & \depcode{HDF5_ENABLE_ROS3_VFD=ON} &
+\depcode{aws-c-s3} CMake package &
+HDF5 does not fetch this library. Building \depcode{aws-c-s3} from source can
+also require AWS C libraries such as \depcode{aws-c-common},
+\depcode{aws-checksums}, \depcode{aws-c-cal}, \depcode{aws-c-io},
+\depcode{aws-c-compression}, \depcode{aws-c-http}, \depcode{aws-c-sdkutils},
+\depcode{aws-c-auth}, and, on Linux, \depcode{aws-lc} and \depcode{s2n-tls}.
+ROS3 docker-proxy tests additionally require \depcode{docker} and the AWS CLI. \\
+HDFS VFD & \depcode{HDF5_ENABLE_HDFS=ON} &
+JNI/JVM and Hadoop \depcode{libhdfs} &
+\depcode{HADOOP_HOME} is used to locate \depcode{hdfs.h}, \depcode{libhdfs},
+and the Hadoop version command. Non-MSVC builds also add \depcode{-pthread}. \\
+Subfiling VFD and IOC VFD & \depcode{HDF5_ENABLE_PARALLEL=ON},
+\depcode{HDF5_ENABLE_SUBFILING_VFD=ON} &
+MPI C with \depcode{MPI_Comm_split_type}, plus Threads &
+Not available on Windows. IOC VFD is built when subfiling is enabled. \\
+External VOL connectors & \depcode{HDF5_VOL_ALLOW_EXTERNAL=GIT} or
+\depcode{LOCAL_DIR} with \depcode{HDF5_VOL_URLnn} or \depcode{HDF5_VOL_PATHnn} &
+Connector-defined &
+Up to ten CMake-based VOL connectors can be added. HDF5 patches connector CMake
+code to use the in-tree HDF5 build, but each connector may bring its own
+dependencies. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{Tools, Tests, and Security Features}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.21\linewidth}p{0.29\linewidth}p{0.20\linewidth}p{0.21\linewidth}@{}}
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Signed plugin verification & \depcode{HDF5_REQUIRE_SIGNED_PLUGINS=ON} &
+OpenSSL libcrypto 1.1.0 or newer &
+Adds \depcode{OpenSSL::Crypto} to HDF5. \depcode{HDF5_LOCK_PLUGIN_KEYSTORE=ON}
+also requires \depcode{HDF5_PLUGIN_KEYSTORE_DIR}. \\
+\depcode{h5sign} tool & \depcode{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\depcode{HDF5_BUILD_TOOLS=ON} &
+OpenSSL libcrypto &
+Used to sign HDF5 plugins. \\
+Signed-plugin tests & \depcode{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\depcode{BUILD_TESTING=ON} &
+\depcode{openssl} executable &
+Tests generate RSA keys with the OpenSSL command-line tool. \\
+Parallel tools utilities & \depcode{HDF5_ENABLE_PARALLEL=ON},
+\depcode{HDF5_BUILD_PARALLEL_TOOLS=ON} &
+MFU, CIRCLE, DTCMP &
+CMake looks for headers and libraries, using \depcode{MFU_ROOT} as a hint. \\
+API test driver & \depcode{BUILD_TESTING=ON},
+\depcode{HDF5_TEST_API_ENABLE_DRIVER=ON} &
+KWSys &
+The test driver fetches KWSys from a tarball or from \depcode{TGZPATH} when
+\depcode{KWSYS_USE_LOCALCONTENT=ON}. \\
+Shell-script tests & \depcode{BUILD_TESTING=ON} &
+PowerShell or Bash &
+CMake uses \depcode{pwsh}/\depcode{powershell} when available; otherwise Unix
+builds look for \depcode{bash}. \\
+ROS3 VFD tests & \depcode{HDF5_ENABLE_ROS3_VFD=ON},
+\depcode{HDF5_ENABLE_ROS3_VFD_DOCKER_PROXY=ON} &
+Docker daemon and AWS CLI &
+Used to run S3 proxy tests. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{Developer and Packaging Dependencies}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.25\linewidth}p{0.34\linewidth}p{0.32\linewidth}@{}}
+\hline
+\textbf{Configuration} & \textbf{Build options} & \textbf{Dependency} \\
+\hline
+Analyzer tooling & \depcode{HDF5_ENABLE_ANALYZER_TOOLS=ON} &
+\depcode{clang-tidy}, \depcode{include-what-you-use}, and \depcode{cppcheck}
+are probed and used by the analyzer macros. \\
+Source formatting targets & \depcode{HDF5_ENABLE_FORMATTERS=ON} &
+\depcode{clang-format} and \depcode{cmake-format}. \\
+Code coverage with Clang/IntelLLVM & \depcode{HDF5_ENABLE_COVERAGE=ON},
+\depcode{CODE_COVERAGE=ON} &
+\depcode{llvm-cov} and \depcode{llvm-profdata}; AppleClang uses
+\texttt{xcrun llvm-cov} and \texttt{xcrun llvm-profdata}. \\
+Code coverage with GCC & \depcode{HDF5_ENABLE_COVERAGE=ON},
+\depcode{CODE_COVERAGE=ON} &
+\depcode{lcov} and \depcode{genhtml}; fallback instrumentation can also link
+\depcode{gcov}. \\
+Sanitizers & \depcode{HDF5_ENABLE_SANITIZERS=ON},
+\depcode{HDF5_USE_SANITIZER=<kind>} &
+Compiler sanitizer runtime support. Supported values depend on compiler and
+platform. \\
+AFL support module & Explicit inclusion of
+\depcode{config/sanitizer/afl-fuzzing.cmake} &
+\depcode{afl-cc} and \depcode{afl-c++}. This module is available but is not
+included by the top-level HDF5 build by default. \\
+Dependency graph support module & Explicit inclusion of
+\depcode{config/sanitizer/dependency-graph.cmake} &
+Graphviz \depcode{dot}. This module is available but is not included by the
+top-level HDF5 build by default. \\
+Windows installers & CPack on Windows &
+NSIS and WiX are probed when available. \\
+Linux packages & CPack on Unix-like systems &
+\depcode{dpkg-shlibdeps} enables DEB generation; \depcode{rpmbuild} enables RPM
+generation for non-parallel builds. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{External Source Defaults}
+
+The following default upstream source locations are encoded in
+\depcode{config/CacheURLs.cmake} for dependencies that HDF5 can fetch or whose
+values are passed to external filter-plugin builds.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.21\linewidth}p{0.19\linewidth}p{0.51\linewidth}@{}}
+\hline
+\textbf{Dependency} & \textbf{Default version/tag} & \textbf{Default source} \\
+\hline
+zlib & \depcode{1.3.2} / \depcode{v1.3.2} &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz} \\
+zlib-ng & \depcode{2.3.3} &
+\url{https://github.com/zlib-ng/zlib-ng.git} or
+\url{https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz} \\
+libaec & \depcode{1.1.6} / \depcode{v1.1.6} &
+\url{https://github.com/MathisRosenhauer/libaec.git} or
+\url{https://github.com/MathisRosenhauer/libaec/releases/download/v1.1.6/libaec-1.1.6.tar.gz} \\
+HDF5 filter plugins & \depcode{master} &
+\url{https://github.com/HDFGroup/hdf5_plugins.git} or
+\url{https://github.com/HDFGroup/hdf5_plugins/releases/download/snapshot/hdf5_plugins-master.tar.gz} \\
+KWSys API-test helper & \depcode{master} tarball &
+\url{https://gitlab.kitware.com/utils/kwsys/-/archive/master/kwsys-master.tar.gz} \\
+h5py Python examples & \depcode{master} &
+\url{https://github.com/h5py/h5py.git} \\
+bitshuffle & \depcode{master} or \depcode{0.5.2} tarball &
+\url{https://github.com/kiyo-masui/bitshuffle.git} or
+\url{https://github.com/kiyo-masui/bitshuffle/archive/refs/tags/bitshuffle-0.5.2.tar.gz} \\
+Blosc & \depcode{1.21.6} &
+\url{https://github.com/Blosc/c-blosc.git} or
+\url{https://github.com/Blosc/c-blosc/archive/refs/tags/c-blosc-1.21.6.tar.gz} \\
+Blosc zlib helper & \depcode{develop} or \depcode{1.3.1} tarball &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz} \\
+Blosc2 & \depcode{2.17.1} &
+\url{https://github.com/Blosc/c-blosc2.git} or
+\url{https://github.com/Blosc/c-blosc2/archive/refs/tags/c-blosc2-2.17.1.tar.gz} \\
+Blosc2 zlib helper & \depcode{develop} or \depcode{1.3.1} tarball &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz} \\
+bzip2 & \depcode{bzip2-1.0.8} &
+\url{https://github.com/libarchive/bzip2.git} or
+\url{https://github.com/libarchive/bzip2/archive/refs/tags/bzip2-bzip2-1.0.8.tar.gz} \\
+fpzip & \depcode{develop} or \depcode{1.3.0} tarball &
+\url{https://github.com/LLNL/fpzip.git} or
+\url{https://github.com/LLNL/fpzip/releases/download/1.3.0/fpzip-1.3.0.tar.gz} \\
+JPEG & \depcode{jpeg-9e} &
+\url{https://github.com/libjpeg-turbo/libjpeg-turbo.git} or
+\url{https://www.ijg.org/files/jpegsrc.v9e.tar.gz} \\
+LZ4 & \depcode{dev} or \depcode{1.10.0} tarball &
+\url{https://github.com/lz4/lz4.git} or
+\url{https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz} \\
+LZF & \depcode{3.6} tarball &
+\url{http://dist.schmorp.de/liblzf/liblzf-3.6.tar.gz} \\
+SZ & \depcode{master} or \depcode{2.1.12.5} tarball &
+\url{https://github.com/szcompressor/SZ.git} or
+\url{https://github.com/szcompressor/SZ/releases/download/v2.1.12.5/SZ-2.1.12.5.tar.gz} \\
+ZFP & \depcode{develop} or \depcode{1.0.1} tarball &
+\url{https://github.com/LLNL/zfp.git} or
+\url{https://github.com/LLNL/zfp/releases/download/1.0.0/zfp-1.0.1.tar.gz} \\
+Zstandard & \depcode{1.5.7} &
+\url{https://github.com/facebook/zstd.git} or
+\url{https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz} \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsection{Downstream Dependencies}
+
+For this audit, downstream dependencies are projects that compile against,
+dynamically load, package, or define data conventions on top of HDF5. The HDF5
+ecosystem is much larger than any static list, so the most important downstreams
+are best identified by blast radius: broad installation footprint, long-lived
+archival data, domain-standard file conventions, or use as an intermediate layer
+for other tools.
+
+\subsubsection{High-Impact Downstream Families}
+
+\begin{description}[leftmargin=1.5em,style=nextline]
+    \item[Scientific data models and exchange formats.]
+    The highest-impact downstream is netCDF-4, which uses HDF5 as the storage
+    layer for the enhanced netCDF data model and is central to climate, weather,
+    ocean, atmospheric, and other Earth-system data workflows~\cite{netcdf4-format}.
+    NASA HDF-EOS5, NeXus, and CGNS similarly define domain-specific conventions
+    over HDF5 for Earth observation, neutron/x-ray/muon facilities, and CFD or
+    aerospace simulation data~\cite{hdf-eos5,nexus-format,cgns-hdf5}. For these
+    formats, HDF5 compatibility is not just a library question: it affects the
+    readability of long-lived archives and the ability of independent tools to
+    interpret a shared schema.
+
+    \item[Language bindings and analysis libraries.]
+    h5py, PyTables, pandas HDFStore, Bioconductor's rhdf5, HDF5.jl, and MATLAB's
+    HDF5 interfaces make HDF5 a routine dependency for Python, R, Julia, and
+    MATLAB users~\cite{h5py-docs,pytables-docs,pandas-hdfstore,rhdf5,hdf5-jl,matlab-hdf5}.
+    These packages are important because they often sit at the boundary between
+    upstream HDF5 builds and end-user scripts. Their packaging choices determine
+    whether users load a bundled HDF5, a system HDF5, or an environment-provided
+    HDF5, and therefore whether ABI, plugin-path, thread-safety, MPI, and filter
+    support match the files being opened.
+
+    \item[Geospatial, visualization, and inspection tools.]
+    GDAL's HDF5 driver, ParaView/VTK-family builds, ITK's HDF5 module, HDFView,
+    and similar readers expose HDF5 files to interactive and automated analysis
+    workflows~\cite{gdal-hdf5,paraview-build,itk-hdf5}. This is an important
+    security boundary: these tools are commonly used to inspect third-party data
+    files, so robustness against malformed HDF5 objects, unusual filters, and
+    unexpected VFD/plugin configuration has direct operational value.
+
+    \item[HPC and parallel-I/O frameworks.]
+    ADIOS2 includes an HDF5 engine, while netCDF-4, CGNS, h5py, and many
+    simulation applications can be built against serial or parallel HDF5
+    variants~\cite{adios2-hdf5}. These downstreams amplify configuration risk:
+    MPI ABI compatibility, collective I/O semantics, file locking behavior,
+    subfiling support, and optional VFDs must line up across the application,
+    HDF5, MPI, and filesystem stack.
+
+    \item[Machine-learning and model-artifact workflows.]
+    TensorFlow/Keras still supports older HDF5 model and weight files even as
+    newer native formats are preferred~\cite{tensorflow-keras-hdf5}. This keeps
+    HDF5 in the model-exchange and training-checkpoint ecosystem, usually through
+    h5py, and makes HDF5 parser behavior relevant for model files obtained from
+    external sources.
+\end{description}
+
+\subsubsection{Representative Downstream Projects}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{@{}p{0.24\linewidth}p{0.32\linewidth}p{0.35\linewidth}@{}}
+\hline
+\textbf{Downstream} & \textbf{Role} & \textbf{Supply-chain relevance} \\
+\hline
+netCDF-4 &
+Common scientific data model and format layered on HDF5. &
+Large transitive footprint through climate, weather, ocean, remote-sensing, and
+HPC data stacks. Uses a constrained HDF5 subset, so compatibility depends on both
+HDF5 behavior and netCDF conventions. \\
+HDF-EOS5 &
+NASA Earth-observation format built on HDF5 concepts and libraries. &
+Long-lived public archives and many third-party readers make backward
+compatibility and robust metadata handling high-value. \\
+NeXus &
+Facility data convention for neutron, x-ray, and muon science. &
+Uses HDF5 groups, datasets, and attributes as a standardized experimental-data
+container, so HDF5 schema interpretation affects reproducibility across
+facilities. \\
+CGNS &
+CFD and aerospace data standard with an HDF5 mapping. &
+Important for mesh and simulation-result exchange; parallel-HDF5 behavior and
+large-file support affect production simulation workflows. \\
+h5py, PyTables, and pandas HDFStore &
+Python interfaces and tabular/array storage layers. &
+Common bridge between binary HDF5 files and Python analysis. Wheel and conda
+packaging can hide which HDF5 build is actually loaded. \\
+rhdf5, HDF5.jl, MATLAB HDF5 APIs &
+R, Julia, and MATLAB access layers. &
+Expose HDF5 to laboratory and scientific-computing workflows where files are
+often exchanged outside controlled build environments. \\
+GDAL and geospatial readers &
+Raster and subdataset access for HDF5-based products. &
+Converts HDF5 issues into geospatial ingestion issues, especially for
+remote-sensing products with complex metadata and nested subdatasets. \\
+ParaView/VTK, ITK, HDFView, and viewers &
+Interactive inspection, visualization, and conversion. &
+Frequently open untrusted or externally generated files; defensive parsing,
+filter availability, and plugin search paths matter. \\
+ADIOS2 and simulation I/O layers &
+Alternative I/O stacks with HDF5 read/write engines or compatibility paths. &
+Parallel and high-throughput workflows depend on matching MPI, filesystem, and
+HDF5 feature assumptions across the whole stack. \\
+TensorFlow/Keras HDF5 artifacts &
+Legacy model and weight serialization. &
+Keeps HDF5 in ML artifact exchange; malformed or incompatible model files
+surface through h5py and HDF5 library behavior. \\
+\hline
+\end{longtable}
+\endgroup
+
+\subsubsection{Audit Implications}
+
+\begin{itemize}
+    \item HDF5 changes have a large transitive blast radius because many users
+    reach HDF5 through netCDF, GDAL, h5py, MATLAB, or domain formats rather than
+    through the HDF5 C API directly.
+    \item ABI and packaging mismatches are a recurring downstream risk. Python,
+    R, Julia, MATLAB, MPI, and system-package environments may all load different
+    HDF5 builds in the same organization.
+    \item File parsing is a practical security boundary. Viewers, converters,
+    notebooks, and data-ingestion jobs often process files received from outside
+    the organization that built the HDF5 library.
+    \item Optional features can become hidden interoperability requirements:
+    filter plugins, SZIP/zlib variants, ROS3/HDFS/VFD support, parallel HDF5,
+    and file-locking behavior may be assumed by downstream data even when they
+    are not present in a default HDF5 build.
+    \item Long-lived scientific archives make deprecation slower than ordinary
+    application software. Even when a downstream project prefers a newer format,
+    historic HDF5 files remain operationally relevant.
+\end{itemize}
+
 \subsection{Audit Findings and Mitigation Priorities}
 
 \end{document}
