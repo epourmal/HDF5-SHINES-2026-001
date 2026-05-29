@@ -3,7 +3,7 @@
 \begin{document}
 
 %% ======================================================================
-%%  Section 6 – Independent HDF5 Implementations
+%%  Section 7 – Independent HDF5 Implementations
 %% ======================================================================
 \section{Independent HDF5 Implementations}
 \label{sec:indie}
@@ -14,6 +14,24 @@
     \item HDF5 library playing footsie with the file format spec: GitHub issue 6409 \cite{hdf5-gh-issue-6409}
 \end{itemize}
 
+\begin{description}
+    \item[PureHDF] Managed .NET read/write without native binaries
+    \item[jHDF] JVM HDF5 reading
+    \item[netCDF-Java] JVM netCDF/HDF-EOS/HDF5 scientific-data reading 
+    \item[pyfive] Pure Python read-only inspection
+    \item[jsfive] Browser-side direct HDF5 read
+    \item[scigolib/hdf5] Pure Go read/write 
+    \item[hdf5-pure and rustyhdf5-format/rustyhdf5] Pure Rust read/write
+    \item[async-hdf5 or h5coro] Cloud object-store chunk mapping
+    \item[JLD2.jl]  Julia-native persistence in HDF5-compatible files
+\end{description}
+
+
+
 \subsection{Audit Findings and Mitigation Priorities}
+
+The main risk across all direct-format implementations is not opening simple files; it is coverage of the long tail: dense groups, fractal heaps, shared object-header messages, all chunk-index variants, references, VLEN, compound/nested datatypes, virtual datasets, external storage, SWMR flags, user blocks, non-core filters, unusual libver bounds, and files produced by different HDF5 library releases. For any production use, build a compatibility corpus and round-trip the generated files using \texttt{h5dump}, \texttt{h5debug}, \texttt{h5py/libhdf5}, and the target-independent implementation.
+
+Machine-readable specification: \texttt{hdf5-pickles}
 
 \end{document}
