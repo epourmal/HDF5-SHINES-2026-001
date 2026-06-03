@@ -73,9 +73,8 @@ dynamically load, package, or define data conventions on top of HDF5. The HDF5
 ecosystem is much larger than any static list, so the most important downstreams
 are best identified by blast radius: broad installation footprint, long-lived
 archival data, domain-standard file conventions, or use as an intermediate layer
-for other tools.
-
-\subsubsection{High-Impact Downstream Families}
+for other tools. The following categories of downstreams are especially
+relevant.
 
 \begin{description}[leftmargin=1.5em,style=nextline]
     \item[Scientific data models and exchange formats.]
@@ -122,14 +121,13 @@ for other tools.
     h5py, and makes HDF5 parser behavior relevant for model files obtained from
     external sources.
 \end{description}
-
-\subsubsection{Representative Downstream Projects}
-
 \begingroup
 \small
 \setlength{\tabcolsep}{3pt}
 \renewcommand{\arraystretch}{1.15}
 \begin{longtable}{@{}p{0.24\linewidth}p{0.32\linewidth}p{0.35\linewidth}@{}}
+\caption{Representative downstream projects that depend on HDF5.}
+\label{tab:downstream} \\
 \hline
 \textbf{Downstream} & \textbf{Role} & \textbf{Supply-chain relevance} \\
 \hline
@@ -179,7 +177,7 @@ surface through h5py and HDF5 library behavior. \\
 \end{longtable}
 \endgroup
 
-\subsubsection{Audit Implications}
+\subsection{Audit Findings and Mitigation Priorities}
 
 \begin{itemize}
     \item HDF5 changes have a large transitive blast radius because many users
@@ -199,7 +197,5 @@ surface through h5py and HDF5 library behavior. \\
     application software. Even when a downstream project prefers a newer format,
     historic HDF5 files remain operationally relevant.
 \end{itemize}
-
-\subsection{Audit Findings and Mitigation Priorities}
 
 \end{document}
