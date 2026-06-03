@@ -27,6 +27,7 @@ force:
 
 clean:
 	@$(LATEXMK) -c
+	@git clean -Xdf -- .
 
 distclean: clean
 	@$(LATEXMK) -C
@@ -47,4 +48,3 @@ help:
 	clean		clean  unnecessary files\n\
 	distclean	clean deeper\n\
 	help		display this help"
-
