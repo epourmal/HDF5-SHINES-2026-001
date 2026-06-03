@@ -302,54 +302,6 @@ Used to run S3 proxy tests. \\
 \setlength{\LTleft}{-0.7in}
 \setlength{\LTright}{-0.7in}
 
-\begin{longtable}{@{}p{0.21\widetablewidth}p{0.29\widetablewidth}p{0.20\widetablewidth}p{0.21\widetablewidth}@{}}
-\caption{Tools, Tests, and Security Features}
-\label{tab:tools-tests-security-features}\\
-\hline
-\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
-\textbf{Notes} \\
-\hline
-Signed plugin verification & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON} &
-OpenSSL libcrypto 1.1.0 or newer &
-Adds \code{OpenSSL::Crypto} to HDF5. \code{HDF5_LOCK_PLUGIN_KEYSTORE=ON}
-also requires \code{HDF5_PLUGIN_KEYSTORE_DIR}. \\
-\code{h5sign} tool & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
-\code{HDF5_BUILD_TOOLS=ON} &
-OpenSSL libcrypto &
-Used to sign HDF5 plugins. \\
-Signed-plugin tests & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
-\code{BUILD_TESTING=ON} &
-\code{openssl} executable &
-Tests generate RSA keys with the OpenSSL command-line tool. \\
-Parallel tools utilities & \code{HDF5_ENABLE_PARALLEL=ON},
-\code{HDF5_BUILD_PARALLEL_TOOLS=ON} &
-MFU, CIRCLE, DTCMP &
-CMake looks for headers and libraries, using \code{MFU_ROOT} as a hint. \\
-API test driver & \code{BUILD_TESTING=ON},
-\code{HDF5_TEST_API_ENABLE_DRIVER=ON} &
-KWSys &
-The test driver fetches KWSys from a tarball or from \code{TGZPATH} when
-\code{KWSYS_USE_LOCALCONTENT=ON}. \\
-Shell-script tests & \code{BUILD_TESTING=ON} &
-PowerShell or Bash &
-CMake uses \code{pwsh}/\code{powershell} when available; otherwise Unix
-builds look for \code{bash}. \\
-ROS3 VFD tests & \code{HDF5_ENABLE_ROS3_VFD=ON},
-\code{HDF5_ENABLE_ROS3_VFD_DOCKER_PROXY=ON} &
-Docker daemon and AWS CLI &
-Used to run S3 proxy tests. \\
-\hline
-\end{longtable}
-\endgroup
-
-\begingroup
-\small
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.15}
-
-\setlength{\LTleft}{-0.7in}
-\setlength{\LTright}{-0.7in}
-
 \begin{longtable}{@{}p{0.25\widetablewidth}p{0.34\widetablewidth}p{0.32\widetablewidth}@{}}
 \caption{Developer and Packaging Dependencies}
 \label{tab:developer-packaging-dependencies}\\
