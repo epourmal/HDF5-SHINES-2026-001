@@ -308,6 +308,10 @@
 \setlength{\littlefigwidth}{\smallfigwidth}
 \setlength{\bigfigwidth}{\largefigwidth}
 
+%% Table widths
+\newlength{\widetablewidth}
+\setlength{\widetablewidth}{\dimexpr\textwidth+1.4in\relax}
+
 %% Logo height
 \newlength{\logoheight}
 \setlength{\logoheight}{34pt}
