@@ -24,168 +24,82 @@
     \item Malicious plugins, see section~\ref{sec:extensions}
 \end{itemize}
 
+A CVE history summary is included in Appendix~\ref{app:cve-history-summary}.
+The list mixes true HDF5-library issues, removed-tool issues,
+duplicate/rejected/not-HDF5 entries, and entries with no commit URL.
+The main pattern is not “many unrelated bugs”; it is repeated failure to validate
+file-derived structure sizes, offsets, counts, message lengths, continuation chunks,
+datatype metadata, or filter parameters before using them in low-level C memory
+operations. The 2025 entries alone show repeated heap overflows, use-after-free,
+null dereference, memory leak, and resource-consumption defects across object
+headers, file-space metadata, type conversion, filters, and metadata cache code.
+
+The fix commentary confirms that several CVEs were symptoms of corrupted metadata
+not being rejected early. (Examples: the file-space page-size fix added a sanity
+check immediately after reading \code{page\_size} from the file; the
+object-header-continuation fix rejects zero continuation chunk sizes;
+the self-referential continuation-message fix checks expected versus actual
+deserialized object-header chunks; and the cache-image fix added buffer-size
+arguments, overflow checks, input validation, and cleanup.)
+
+The strategic root-cause categories are tighter than the CVE count
+suggests, and are summarized in Table~\ref{tab:hdf5-cve-root-cause-categories}.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.28\widetablewidth}p{0.68\widetablewidth}@{}}
+\caption{Strategic root-cause categories in the HDF5 CVE history}
+\label{tab:hdf5-cve-root-cause-categories}\\
+\hline
+\textbf{Root-cause category} & \textbf{What it means for HDF5} \\
+\hline
+\endfirsthead
+
+\caption[]{Strategic root-cause categories in the HDF5 CVE history, continued}\\
+\hline
+\textbf{Root-cause category} & \textbf{What it means for HDF5} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+unchecked file-derived sizes/counts/offsets &
+The dominant class. HDF5 metadata controls object layout, heap blocks, chunks,
+dataspaces, filters, links, and type descriptors. When those fields are malformed,
+C code later trusts them. \\
+inconsistent internal bookkeeping &
+Attribute tables, cache images, continuation chunks, and free lists often needed
+separate ``allocated capacity'' versus ``actual count'' tracking. \\
+decode/encode asymmetry &
+Several issues happen because decode did not reject bad messages, then encode/flush
+later assumed valid native structures. \\
+arithmetic precondition failures &
+Divide-by-zero and multiplication-overflow checks were missing in chunking, layout,
+b-tree, filter, and dataspace paths. \\
+unsafe cleanup/lifetime paths &
+Use-after-free, double-free, leaks, and null dereferences show that malformed input
+often breaks unwinding logic as much as the primary decode logic. \\
+legacy tool attack surface &
+\code{gif2h5}, HDF to GIF conversion, \code{h5dump}, and \code{h5repack} appear
+repeatedly. Removal of \code{gif2h5} was a structural mitigation, not just a patch. \\
+incomplete triage metadata &
+Several entries have \code{commit_url: null}, ``not filed against HDF5,'' ``cannot
+reproduce,'' ``not applicable,'' or tentative confidence. Those should not be counted
+as reviewed HDF5 fixes without qualification. \\
+\end{longtable}
+\endgroup
+
 \subsection{Footprints, Fingerprints, Controls -- HDF5 Privacy}
-
-HDF5 privacy is best treated as an exposure-management problem, not only as a
-confidentiality or access-control problem. In a broader privacy-engineering
-sense, ordinary data processing can create privacy harm through inference,
-aggregation, secondary use, contextual change, or surveillance effects even when
-systems are secure and operating as designed. That distinction matters for HDF5
-because the format was built to make scientific data portable, self-describing,
-reusable, and long-lived. Those same properties can preserve or reveal
-information that a data producer did not intend to disclose.
-
-In scientific settings, sensitive information may appear outside the primary
-dataset values. HDF5 files often cross institutional boundaries, enter public
-repositories, move into cloud workflows, and survive long enough to be reused
-with analysis techniques that did not exist when the files were created.
-Machine-learning and cross-repository analysis make this more acute: information
-that appears harmless in one file can become revealing when correlated with
-quality-control products, timestamps, geospatial metadata, workflow records, or
-external data sources.
-
-\subsubsection{Privacy-Sensitive Assets}
-
-The privacy surface of an HDF5 ecosystem includes several asset classes.
-
-\begin{description}
-    \item[Data values.]
-    Datasets may contain biomedical observations, wearable-sensor measurements,
-    geospatial products, industrial telemetry, facility observations, images,
-    simulations, or other measurements that directly disclose sensitive
-    information or enable sensitive inference.
-
-    \item[User metadata.]
-    HDF5 groups, datasets, committed datatypes, dataspaces, attributes, object
-    names, link names, compound datatype member names, enumeration labels, and
-    object comments can expose context. Timestamps, coordinates, instrument
-    identifiers, acquisition settings, calibration details, experimental
-    identifiers, and provenance fields are scientifically useful, but may also
-    identify people, facilities, locations, schedules, or research objectives.
-
-    \item[Structural metadata.]
-    The hierarchy of groups and datasets, dataset dimensions, chunking,
-    filtering pipelines, external storage, links, object references, region
-    references, and virtual datasets can reveal categories, processing stages,
-    cohorts, workflow assumptions, and relationships among observations even
-    when raw values are not inspected.
-
-    \item[Internal format metadata.]
-    HDF5 library and file-format structures can also leak clues. Examples
-    include global heaps that store variable-length data, object reference
-    counts, textual datatype descriptions produced by applications, creation
-    order tracking, chunk indexing structures, and other implementation details
-    that reveal the shape or semantics of stored content.
-
-    \item[Derived and reconstructed information.]
-    Privacy-sensitive facts may be inferred from combinations of datasets,
-    linked files, external links, region references, virtual dataset mappings,
-    masks, quality-control arrays, and provenance records. In these cases the
-    protected asset is not a single stored object, but a relationship that can
-    be reconstructed.
-
-    \item[Workflow artifacts.]
-    Tool output, \texttt{h5dump} reports, diagnostic logs, temporary files,
-    intermediate products, metadata snapshots, conversion artifacts, and
-    plugin-generated metadata may persist after the workflow that created them.
-    These artifacts can expose information that users do not associate with the
-    released HDF5 file itself.
-\end{description}
-
-\subsubsection{Exposure Mechanisms}
-
-Five exposure mechanisms recur in HDF5 workflows.
-
-\begin{description}
-    \item[Metadata exposure.]
-    Because HDF5 is self-describing, metadata remains visible and useful across
-    tools. That visibility can reveal acquisition time, location, instrument
-    identity, laboratory conditions, patient class, operational status, or
-    internal annotations even when primary data values are transformed,
-    anonymized, or protected elsewhere.
-
-    \item[Structural inference.]
-    File structure often mirrors scientific intent. Paths, group organization,
-    dataset dimensions, chunking choices, compression filters, external storage
-    mappings, and virtual dataset relationships can disclose experimental
-    design, processing stages, classifications, or the absence or presence of
-    expected observations.
-
-    \item[Raw-representation exposure.]
-    Low-level storage patterns and convenience metadata may reveal information
-    about raw content without requiring full application-level interpretation.
-    Fixed-length strings, textual datatype descriptions, descriptive
-    attributes, and implementation-specific layout choices can expose semantics
-    even when direct value access is restricted.
-
-    \item[Unintended inclusion or alteration.]
-    Converters and processing pipelines frequently enrich data to improve
-    interoperability. Well-intentioned conversion from non-self-describing
-    formats into HDF5 can turn implicit structure into explicit datasets or
-    metadata. Derived products and provenance added for reproducibility can
-    become new privacy surfaces.
-
-    \item[Cross-data linkage.]
-    HDF5 supports linkage across files and systems through external links,
-    external storage, virtual datasets, VFDs, and VOL connectors. These features
-    are valuable for science, but can also make otherwise benign measurements
-    revealing when combined with geospatial data, timestamps, masks,
-    quality-control arrays, or external repositories.
-\end{description}
-
-\subsubsection{Lifecycle Controls}
-
-Privacy in HDF5 is not a static property of a file. It changes as data are
-collected, converted, annotated, transformed, shared, archived, replicated, and
-reused. A privacy-aware HDF5 workflow should therefore treat exposure review as
-part of the data lifecycle.
-
-\begin{itemize}
-    \item Classify datasets and metadata before release, including attributes,
-    names, datatype fields, dimensions, VDS mappings, references, and external
-    links.
-    \item Minimize metadata that is not needed for the intended reuse, and
-    replace sensitive names, labels, locations, identifiers, and timestamps with
-    controlled or generalized values where scientific meaning permits.
-    \item Review conversion and enrichment tools for metadata they add
-    automatically, especially when translating from less self-describing formats
-    into HDF5.
-    \item Separate sensitive provenance, operational notes, logs, and temporary
-    workflow products from public data products unless they are intentionally
-    part of the release.
-    \item Treat structure as inspectable information. Redaction plans should
-    consider object paths, hierarchy, dimensions, chunk layout, filters, links,
-    references, and related side files, not only dataset values.
-    \item Reassess older HDF5 archives when data are moved to new repositories,
-    combined with other collections, opened to AI/ML workflows, or released to a
-    broader audience than originally expected.
-\end{itemize}
-
-\subsubsection{Control Levels}
-
-The practical control posture falls along a continuum.
-
-\begin{description}
-    \item[Open by design.]
-    Some HDF5 data products are intended to be fully inspectable. For these
-    releases, the control is explicit documentation: state what metadata,
-    structure, provenance, links, and workflow artifacts are intentionally
-    exposed, and verify that no unintended sensitive context remains.
-
-    \item[Exposure-reduced sharing.]
-    The middle ground is usually the most important case. Preserve enough HDF5
-    metadata for reproducibility and interoperability, but remove, generalize,
-    tokenize, or separate fields that identify people, facilities, precise
-    locations, operational schedules, unpublished scientific objectives, or
-    sensitive workflow details.
-
-    \item[Strong protection.]
-    When either values or metadata cannot be safely exposed, use access control,
-    encryption, repository policy, or container-level protections around the
-    file and its side artifacts. Encryption of raw values alone is insufficient
-    if names, attributes, structure, logs, links, or external storage mappings
-    still reveal the sensitive context.
-\end{description}
 
 \subsection{HDF5 Tools}
 
@@ -193,18 +107,785 @@ Not strictly part of the core library, but the tools are an important part of th
 
 \subsection{Audit Findings and Mitigation Priorities}
 
-\begin{itemize}
-    \item HDF5 privacy review should cover user-controlled metadata and internal
-    structural metadata in addition to raw datasets.
-    \item Tooling should help users inventory attributes, names, references,
-    external links, VDS mappings, filters, datatype fields, and workflow
-    artifacts before publication.
-    \item Documentation and training should teach HDF5 users to recognize
-    exposure surfaces, because many privacy failures arise during legitimate
-    sharing and reuse rather than from malicious access.
-    \item Privacy guidance for HDF5 should be aligned with open-science goals:
-    the objective is not to make data opaque by default, but to make exposure
-    intentional, reviewable, and proportionate to the release context.
-\end{itemize}
+The blunt conclusion: HDF5’s CVE history is mostly malformed-file
+parsing pressure against a complex binary metadata machine.
+The fix direction should not be “patch each crash.” It should be
+systematic metadata validation at decode boundaries, explicit
+invariants for each on-disk structure, fuzz corpora tied to invariants,
+and hard separation between parser acceptance and internal object
+construction.
+
+\paragraph{Goal:} HDF5 should be able to parse any byte stream as hostile input
+and either reject it cleanly or produce a validated internal object graph.
+Anything else is security debt.
+
+\paragraph{Implementation program:} define parser invariants first, harden decode
+boundaries, then make fuzzing, CI gates, and release governance
+enforce them.
+
+The next priority is parser normalization: decode file bytes into a
+validated intermediate form before constructing internal objects,
+so malformed metadata cannot reach trusted C paths.
+
+Our goal should be: \textit{make malformed HDF5 files boring}.
+Every corrupted file should terminate in a controlled
+\texttt{H5E\_BADVALUE}, \texttt{H5E\_OVERFLOW}, \texttt{H5E\_CORRUPT},
+or \texttt{H5E\_RESOURCE} path. No segfaults. No assertions. No leaks.
+No undefined behavior. No late-stage encode/flush crash from a bad
+decode.
+
+The current CVE list includes many issues in \texttt{H5FS},
+\texttt{H5C}, \texttt{H5O}, \texttt{H5T}, \texttt{H5Z}, and
+vector-copy paths, with repeated heap overflows, use-after-free,
+null dereference, and resource-consumption outcomes.
+HDF5’s own format documentation explains why this happens: a file is a
+graph of groups, datasets, and named datatypes; on disk it is
+represented through lower-level structures such as the superblock,
+B-tree nodes, object headers, global heaps, local heaps, and
+free-space metadata. That means the library is parsing a dense graph
+of mutually referential, \textit{attacker-controlled} metadata.
+
+\subsubsection*{Priority 0: Stop closing CVEs as “fixed” unless the class is killed}
+
+Make this rule immediate:
+
+
+\textit{If the fix is not a structural change that eliminates the root cause, then it is not a fix.}
+
+For every new CVE or crash:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.30\linewidth}p{0.66\linewidth}@{}}
+\caption{Required artifacts for closing HDF5 CVEs or crash reports}
+\label{tab:cve-closure-artifacts}\\
+\hline
+\textbf{Required artifact} & \textbf{Purpose} \\
+\hline
+\endfirsthead
+
+\caption[]{Required artifacts for closing HDF5 CVEs or crash reports, continued}\\
+\hline
+\textbf{Required artifact} & \textbf{Purpose} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+crashing input & becomes a permanent corpus seed \\
+minimized input & used in quick PR regression \\
+root-cause category & maps to a known invariant class \\
+invariant update & prevents sibling bugs \\
+sanitizer regression & proves no crash, no leak, no UAF \\
+negative test & checks controlled failure code \\
+reviewer checklist update & prevents reintroduction \\
+\end{longtable}
+\endgroup
+
+This is the first cultural shift. A patch that only adds a local \texttt{if}
+is tolerated for embargoed fixes, but the issue remains open as a
+\textbf{class bug} until the invariant framework catches sibling cases.
+
+Recent commits show the right direction, but too locally. One fix
+added a sanity check immediately after reading file-space page size
+from the file and used the same fuzzer to verify that the previous
+assertion became a corrupted-file error.~\cite{commit_804f3ba}
+Another hardened \texttt{H5C\_\_reconstruct\_cache\_entry()} by adding
+buffer-size tracking, overflow checks, input validation, and safe cleanup.~\cite{commit_3914bb7}
+Those are exactly the moves to systematize.
+
+\subsubsection*{Priority 1: Build an invariant registry for the file format}
+
+Create a versioned document and machine-readable metadata file, for example:
+
+\begin{verbatim}
+security/invariants/
+  superblock.yml
+  object_header.yml
+  dataspace.yml
+  datatype.yml
+  layout.yml
+  filters.yml
+  heaps.yml
+  free_space.yml
+  links.yml
+  cache_image.yml
+\end{verbatim}
+
+Each entry should define:
+
+\begin{minted}{yaml}
+id: H5O-CONT-001
+component: object_header
+structure: continuation_message
+condition: continuation_chunk_size > 0
+failure: H5E_CORRUPT
+checked_at:
+  - H5O__cont_decode
+  - H5O__chunk_deserialize
+fuzz_targets:
+  - fuzz_object_header
+cves:
+  - CVE-2025-6856
+  - CVE-2025-6816
+\end{minted}
+
+Start with these invariant families.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.16\widetablewidth}p{0.80\widetablewidth}@{}}
+\caption{Invariant families to enforce first}
+\label{tab:invariant-families-first}\\
+\hline
+\textbf{Area} & \textbf{Invariants to enforce first} \\
+\hline
+\endfirsthead
+
+\caption[]{Invariant families to enforce first, continued}\\
+\hline
+\textbf{Area} & \textbf{Invariants to enforce first} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+superblock &
+offset size and length size are valid; base address, EOF address, driver info
+address, and root object address are inside the file or explicitly undefined;
+EOF does not wrap \\
+object headers &
+message length fits inside chunk; continuation chunks are nonzero; continuations
+do not self-reference; continuations are acyclic; message flags match message
+type; unknown messages cannot be cast into known message structures \\
+free-space metadata &
+page size is nonzero and below max; section size fits page/file bounds;
+serialized section count matches decoded section count \\
+heaps &
+heap object offset and size are inside heap; free-list blocks do not overlap;
+free-block list is acyclic; no allocation uses unchecked \code{count * size} \\
+dataspaces &
+rank is bounded; dimension product is checked; selected point count is checked;
+hyperslab stride, count, block, and start do not overflow \\
+datatypes &
+storage size is nonzero; precision fits storage size; member offsets fit
+compound size; string length is bounded; vlen/ref types cannot escape validation \\
+layouts &
+compact data size equals \code{dataspace elements * datatype size}; chunk
+dimensions are nonzero; chunk product is checked; chunk index references are
+inside file bounds \\
+filters &
+parameter count is bounded; decompressed size is bounded; scale-offset precision
+is validated; filter output ratio cannot exceed configured resource limits \\
+cache image &
+cache-entry count, address, size, and alignment are bounded; decoding consumes
+exactly the expected number of bytes; cleanup is safe after partial decode \\
+tools &
+string rendering is length-bounded; conversion tools never trust input
+dimensions; tool-only parsers use the same checked arithmetic wrappers as the
+library \\
+\end{longtable}
+\endgroup
+
+This registry becomes the source of truth for code review, tests, fuzzing, and documentation.
+
+\subsubsection*{Priority 2: Introduce a two-phase parser boundary}
+
+Right now, too many paths appear to do this:
+\begin{verbatim}
+file bytes -> native internal object
+           -> later code assumes validity
+\end{verbatim}
+
+Change the architecture to:
+\begin{verbatim}
+file bytes -> bounded raw decode
+           -> semantic validation
+           -> native object construction
+\end{verbatim}
+
+Concrete rule: \textit{No public or internal runtime object is constructed from
+file metadata until the corresponding validator has passed.}
+
+Implement the pattern by component:
+
+\begin{minted}{c}
+herr_t H5O_msg_decode_raw(const uint8_t *buf, size_t buf_size, H5O_msg_raw_t *raw);
+herr_t H5O_msg_validate(const H5F_t *f, const H5O_msg_raw_t *raw, H5O_validation_ctx_t *ctx);
+herr_t H5O_msg_construct(const H5O_msg_raw_t *raw, H5O_msg_t *out);    
+\end{minted}
+
+Do not let decode functions allocate complex structures before basic
+bounds are known. A raw decoded object should hold values, offsets,
+and spans, not trusted pointers into long-lived internal state.
+
+All decode functions that consume file bytes should take one of these forms:
+\begin{minted}{c}
+herr_t decode(const H5F_t *f, const uint8_t *buf, size_t buf_size, out_t *out);
+
+herr_t decode_cursor(H5_decode_cursor_t *cur, out_t *out);
+\end{minted}
+
+Ban this pattern in security-sensitive decode code:
+\begin{minted}{c}
+const uint8_t **pp
+\end{minted}
+unless there is also an explicit \texttt{p\_end} or remaining-size counter. The cache-image fix already moved in this direction
+by adding a buffer-size argument and bounds checks.~\cite{commit_3914bb7}
+
+\subsubsection*{Priority 3: Centralize checked arithmetic and allocation}
+
+Most parser bugs become exploitable when metadata reaches allocation, copy, or pointer arithmetic. Add a small, mandatory checked-arithmetic layer.
+
+Example API:
+\begin{minted}{c}
+herr_t H5_checked_add_hsize(hsize_t a, hsize_t b, hsize_t *out);
+herr_t H5_checked_mul_hsize(hsize_t a, hsize_t b, hsize_t *out);
+herr_t H5_checked_addr_add(haddr_t base, hsize_t len, haddr_t eoa, haddr_t *end);
+herr_t H5_checked_alloc_size(size_t count, size_t elem_size, size_t *bytes);
+\end{minted}
+
+Then make these rules review-blocking:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.48\linewidth}p{0.48\linewidth}@{}}
+\caption{Review-blocking parser arithmetic and allocation patterns}
+\label{tab:review-blocking-parser-patterns}\\
+\hline
+\textbf{Ban} & \textbf{Replacement} \\
+\hline
+\endfirsthead
+
+\caption[]{Review-blocking parser arithmetic and allocation patterns, continued}\\
+\hline
+\textbf{Ban} & \textbf{Replacement} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+\code{malloc(n * size)} & \code{H5MM_calloc_checked(n, size)} \\
+\code{addr + size} & \code{H5_checked_addr_add(addr, size, eoa, \&end)} \\
+\code{memcpy(dst, src, n)} from file-derived size &
+\code{H5_checked_memcpy(dst, dst_size, src, src_size, n)} \\
+pointer increment without \code{p_end} & cursor-based decode \\
+raw recursion through object graph & bounded traversal context \\
+\end{longtable}
+\endgroup
+
+The 2024 security commit added multiplication-overflow checks for
+dataset storage size and checks against file bounds.~\cite{commit_ce53bc0}
+That pattern should become a library-wide rule, not a local repair.
+
+\subsubsection*{Priority 4: Create security profiles for file opening}
+
+Add explicit modes. Do not rely on users to infer safe behavior.
+\begin{minted}{c}
+typedef enum {
+    H5_SECURITY_PROFILE_LEGACY,
+    H5_SECURITY_PROFILE_TRUSTED_FAST,
+    H5_SECURITY_PROFILE_UNTRUSTED_STRICT,
+    H5_SECURITY_PROFILE_FORENSIC
+} H5_security_profile_t;
+\end{minted}
+
+Suggested semantics:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.24\linewidth}p{0.72\linewidth}@{}}
+\caption{Security profile semantics}
+\label{tab:security-profile-semantics}\\
+\hline
+\textbf{Profile} & \textbf{Behavior} \\
+\hline
+\endfirsthead
+
+\caption[]{Security profile semantics, continued}\\
+\hline
+\textbf{Profile} & \textbf{Behavior} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+\code{legacy} & current compatibility bias \\
+\code{trusted_fast} & normal validation, generous resource limits \\
+\code{untrusted_strict} & strict metadata validation, plugin loading disabled unless allowlisted, resource limits enforced \\
+\code{forensic} & never repairs silently, reports all structural anomalies, best-effort inspection without unsafe traversal \\
+\end{longtable}
+\endgroup
+
+Expose it through file-access property lists:
+\begin{minted}{c}
+H5Pset_security_profile(fapl, H5_SECURITY_PROFILE_UNTRUSTED_STRICT);
+H5Pset_max_metadata_bytes(fapl, 256 * 1024 * 1024);
+H5Pset_max_object_header_chunks(fapl, 1024);
+H5Pset_max_btree_depth(fapl, 64);
+H5Pset_max_filter_expansion_ratio(fapl, 100);
+H5Pset_plugin_policy(fapl, H5_PLUGIN_POLICY_DISABLED);
+\end{minted}
+
+This matters because HDF5 supports dynamically loaded plugins, and the
+runtime API can enable or disable plugin classes; the docs also state
+that \texttt{HDF5\_PLUGIN\_PRELOAD=::} disables all dynamic plugins.
+Turn that capability into a first-class security policy, not an
+environment-variable trick.
+
+\subsubsection*{Priority 5: Fuzz by structure, not just by whole-file crashes}
+
+Whole-file fuzzing is necessary but insufficient. It finds symptoms. Structure-aware fuzzing finds families.
+
+Build fuzz targets in this order:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}r p{0.40\linewidth}p{0.48\linewidth}@{}}
+\caption{Structure-aware fuzzing priorities}
+\label{tab:structure-aware-fuzzing-priorities}\\
+\hline
+\textbf{Order} & \textbf{Fuzz target} & \textbf{Why first} \\
+\hline
+\endfirsthead
+
+\caption[]{Structure-aware fuzzing priorities, continued}\\
+\hline
+\textbf{Order} & \textbf{Fuzz target} & \textbf{Why first} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+1 & object-header message decoder & many paths flow through it \\
+2 & datatype decoder and converter & high exploitability and complex nested metadata \\
+3 & dataspace and selection decoder & rank, count, hyperslab, and point math \\
+4 & layout and chunk index decoder & storage-size, address, and chunk-product risks \\
+5 & free-space and local/global heap decoders & repeated historical overflow and list-corruption class \\
+6 & filter pipeline and scale-offset filter & compression/decompression boundary risk \\
+7 & metadata cache image reconstruction & high complexity and recent CVE pattern \\
+8 & \code{h5dump}/\code{h5repack} rendering paths & tool paths often bypass library assumptions \\
+\end{longtable}
+\endgroup
+
+Use three fuzzing layers:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.28\linewidth}p{0.68\linewidth}@{}}
+\caption{Fuzzing layers}
+\label{tab:fuzzing-layers}\\
+\hline
+\textbf{Layer} & \textbf{Description} \\
+\hline
+\endfirsthead
+
+\caption[]{Fuzzing layers, continued}\\
+\hline
+\textbf{Layer} & \textbf{Description} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+byte-level fuzzing & current randomized mutation against APIs \\
+structure-aware mutation & valid superblock with corrupted object headers, valid object header with bad continuation, valid datatype with bad member offset \\
+invariant-guided generation & generate files that violate exactly one invariant at a time \\
+\end{longtable}
+\endgroup
+
+OSS-Fuzz already supports libFuzzer, AFL++, Honggfuzz, Centipede, sanitizers,
+and distributed execution for C/C++ projects. Use OSS-Fuzz for long-running
+public coverage and ClusterFuzzLite or local CI for PR-level checks.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.24\linewidth}p{0.72\linewidth}@{}}
+\caption{Fuzzing acceptance criteria}
+\label{tab:fuzzing-acceptance-criteria}\\
+\hline
+\textbf{Stage} & \textbf{Gate} \\
+\hline
+\endfirsthead
+
+\caption[]{Fuzzing acceptance criteria, continued}\\
+\hline
+\textbf{Stage} & \textbf{Gate} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+PR & run minimized CVE corpus under \code{ASan}/\code{UBSan}/\code{LSan} \\
+nightly & run structure fuzzers for core parsers \\
+weekly & report coverage by component, not just total line coverage \\
+release candidate & 72-hour fuzz soak on changed parser areas \\
+CVE closure & crashing input added to corpus and mapped to invariant \\
+\end{longtable}
+\endgroup
+
+\subsubsection*{Priority 6: Make malformed-input regression cheap}
+
+Create this repository layout:
+\begin{verbatim}
+test/security/
+  corpus/
+    cve/
+      CVE-2025-7069/
+        input.h5
+        expected.yml
+      CVE-2025-6269/
+        input.h5
+        expected.yml
+    invariants/
+      H5O-CONT-001/
+      H5T-SIZE-002/
+  harnesses/
+    fuzz_object_header.c
+    fuzz_datatype.c
+    fuzz_dataspace.c
+    fuzz_layout.c
+    fuzz_filters.c
+  expected_errors/
+    corrupt_file.yml
+\end{verbatim}
+
+Each expected.yml should include:
+\begin{minted}{yaml}
+expected:
+  exit: controlled_error
+  allowed_errors:
+    - H5E_CORRUPT
+    - H5E_BADVALUE
+    - H5E_OVERFLOW
+forbidden:
+  - SIGSEGV
+  - SIGABRT
+  - leak
+  - use_after_free
+  - timeout
+invariant:
+  - H5FS-PAGE-001
+\end{minted}
+
+This gives maintainers a fast way to prove that old crashes remain dead.
+
+\subsubsection*{Priority 7: Add a security-review checklist that blocks risky parser changes}
+
+Every PR touching decode, encode, object lifecycle, filters, tools, or plugin
+loading should answer:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.58\linewidth}p{0.38\linewidth}@{}}
+\caption{Security-review checklist for parser-adjacent changes}
+\label{tab:security-review-checklist}\\
+\hline
+\textbf{Question} & \textbf{Required answer} \\
+\hline
+\endfirsthead
+
+\caption[]{Security-review checklist for parser-adjacent changes, continued}\\
+\hline
+\textbf{Question} & \textbf{Required answer} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+Does this read file-derived bytes? & list buffer and bounds source \\
+Does this allocate using file-derived values? & show checked multiplication \\
+Does this copy memory using file-derived sizes? & show source and destination bounds \\
+Does this traverse links, chunks, heaps, B-trees, or continuations? & show cycle and depth bounds \\
+Does this construct native objects before validation? & explain why or refactor \\
+Does this add or change cleanup paths? & show partial-init safety \\
+Does this invoke plugins or filters? & show policy interaction \\
+Does this alter error handling? & show malformed-input test \\
+\end{longtable}
+\endgroup
+
+Add automated enforcement where possible:
+
+\begin{verbatim}
+fail PR if new decode function lacks size parameter
+fail PR if malloc(count * size) appears outside checked wrapper
+fail PR if memcpy appears in parser code without checked wrapper annotation
+fail PR if new parser file lacks fuzz target registration
+fail PR if new object traversal lacks max-depth or visited-set logic
+\end{verbatim}
+
+This will annoy contributors at first. Good. That friction is cheaper than post-release CVEs.
+
+\subsubsection*{Priority 8: Separate compatibility from safety}
+
+HDF5’s backward compatibility is valuable, but it creates a security trap: old,
+permissive parsing keeps malformed legacy structures alive.
+
+Implement this policy:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.42\linewidth}p{0.54\linewidth}@{}}
+\caption{Compatibility and safety profile policy}
+\label{tab:compatibility-safety-profile-policy}\\
+\hline
+\textbf{Case} & \textbf{Behavior} \\
+\hline
+\endfirsthead
+
+\caption[]{Compatibility and safety profile policy, continued}\\
+\hline
+\textbf{Case} & \textbf{Behavior} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+valid legacy file & accepted \\
+ambiguous legacy construct & accepted only in \code{legacy} or \code{trusted_fast}; warning in \code{forensic}; rejected in \code{untrusted_strict} \\
+structurally invalid file that old versions tolerated & rejected in all non-legacy profiles \\
+parser repair needed & repair only through explicit tool, never silently during normal open \\
+unknown message with unsafe flags & rejected unless profile explicitly allows preservation \\
+\end{longtable}
+\endgroup
+
+The point is not to break legitimate archives. The point is to stop treating
+corrupted metadata as compatibility.
+
+\subsubsection*{Priority 9: Harden tools as separate attack surfaces}
+
+Do not assume \code{h5dump}, \code{h5repack}, converters, and test utilities are
+less important. They are often the first thing users run on untrusted files.
+
+Actions:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.30\linewidth}p{0.66\linewidth}@{}}
+\caption{Tool hardening actions}
+\label{tab:tool-hardening-actions}\\
+\hline
+\textbf{Tool class} & \textbf{Change} \\
+\hline
+\endfirsthead
+
+\caption[]{Tool hardening actions, continued}\\
+\hline
+\textbf{Tool class} & \textbf{Change} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+inspection tools & use \code{H5_SECURITY_PROFILE_FORENSIC} by default \\
+conversion tools & use \code{H5_SECURITY_PROFILE_UNTRUSTED_STRICT} by default \\
+rendering paths & bounded strings only \\
+legacy converters & disable by default; build behind explicit \code{HDF5_ENABLE_LEGACY_UNSAFE_TOOLS=ON} \\
+plugin-dependent tools & warn or require allowlist \\
+\end{longtable}
+\endgroup
+
+A dangerous file should not become more dangerous because the user tried to
+inspect it.
+
+\subsubsection*{Priority 10: Plugin policy and signed extensions}
+
+Plugins are a different risk class. They are executable code loaded at runtime.
+HDF5’s plugin system supports dynamically loaded filter plugins and lets users
+implement custom filters. That is useful, but it must not be invisible in
+untrusted mode.
+
+Implement:
+\begin{verbatim}
+default profile:
+  trusted_fast: existing plugin behavior
+  untrusted_strict: plugins disabled unless allowlisted
+  forensic: plugins disabled; report missing filter
+\end{verbatim}
+
+Add a plugin manifest:
+\begin{minted}{yaml}
+plugin_id: 32008
+name: blosc
+version: 1.0.0
+sha256: ...
+signer: ...
+allowed_profiles:
+  - trusted_fast
+  - untrusted_strict
+capabilities:
+  - filter_decode
+limits:
+  max_expansion_ratio: 100
+  max_alloc_bytes: 1073741824
+\end{minted}
+
+Do not start with a perfect PKI. Start with allowlisted hashes and paths.
+Then add signatures. The signed-plugin work matters, but without resource limits
+a signed buggy plugin can still crash the process.
+
+\subsubsection*{Priority 11: Supply-chain controls after parser controls}
+
+Supply-chain work matters, but it is second-order relative to malformed-file parsing. Do it in parallel only after the parser program has owners.
+
+Minimum controls:
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.32\linewidth}p{0.64\linewidth}@{}}
+\caption{Minimum supply-chain controls}
+\label{tab:minimum-supply-chain-controls}\\
+\hline
+\textbf{Control} & \textbf{Target} \\
+\hline
+\endfirsthead
+
+\caption[]{Minimum supply-chain controls, continued}\\
+\hline
+\textbf{Control} & \textbf{Target} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+OpenSSF Scorecard & weekly scheduled run, alerts in security tab \\
+CodeQL & required for PRs touching C/C++ parser surfaces \\
+pinned GitHub Actions & no floating third-party action refs \\
+SBOM & release artifacts include source and binary SBOMs \\
+signed release artifacts & signatures plus checksums \\
+SLSA provenance & release builds produce verifiable provenance \\
+\end{longtable}
+\endgroup
+
+OpenSSF Scorecard has an official GitHub Action, and public repositories can use
+it without cost. The SLSA GitHub generator provides tooling for SLSA provenance
+on GitHub Actions, including provenance that users can verify to understand how
+an artifact was built.
+
+\subsubsection*{Priority 12: Metrics that force the right behavior}
+
+Use metrics that measure class elimination, not activity.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{longtable}{@{}p{0.70\linewidth}p{0.26\linewidth}@{}}
+\caption{Security program metrics}
+\label{tab:security-program-metrics}\\
+\hline
+\textbf{Metric} & \textbf{Target} \\
+\hline
+\endfirsthead
+
+\caption[]{Security program metrics, continued}\\
+\hline
+\textbf{Metric} & \textbf{Target} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+CVE corpus pass rate under ASan/UBSan/LSan & 100\% \\
+parser decode functions with explicit buffer size or cursor & 100\% \\
+parser allocations through checked wrappers & 100\% \\
+parser memcpy/memmove through checked wrappers or reviewed exemption & 100\% \\
+high-risk structures with invariant files & 100\% \\
+high-risk structures with fuzz target & 100\% \\
+new CVEs that add invariant updates & 100\% \\
+time from new crash to minimized corpus seed & under 48 hours \\
+time from minimized seed to invariant classification & under 5 business days \\
+sanitizer-clean nightly fuzz runs & sustained \\
+untrusted profile test coverage & every release \\
+\end{longtable}
+\endgroup
+
+Track this in a public dashboard. Not because dashboards fix bugs. They stop the
+team from pretending that “more tests” is a plan.
 
 \end{document}

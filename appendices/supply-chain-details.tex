@@ -1,0 +1,465 @@
+\documentclass[../main.tex]{subfiles}
+
+\begin{document}
+
+%% ======================================================================
+%%  Appendix 1 – ???
+%% ======================================================================
+\section{Software Supply Chain Details}
+\label{app:supply-chain}
+
+
+The \code{HDF5_ALLOW_EXTERNAL_SUPPORT} modes apply to filter-related
+dependencies. Some test and example configurations have their own source-fetch
+paths, such as KWSys for the API test driver and h5py for Python examples. MPI,
+HDFS, ROS3, OpenSSL, Java, documentation, packaging, and developer tools must be
+provided by the build environment.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.16\widetablewidth}p{0.38\widetablewidth}p{0.42\widetablewidth}@{}}
+\caption{Dependency source modes}
+\label{tab:dependency-source-modes}\\
+\hline
+\textbf{Mode} & \textbf{Relevant options} & \textbf{Meaning} \\
+\hline
+System packages & \code{HDF5_ALLOW_EXTERNAL_SUPPORT=NO} &
+CMake uses \code{find_package()}, \code{find_library()}, or
+\code{find_program()} to locate installed dependencies. This is the default. \\
+Git fetch & \code{HDF5_ALLOW_EXTERNAL_SUPPORT=GIT} plus a
+dependency-specific \code{*_USE_EXTERNAL=ON} option &
+CMake downloads source from the configured \code{*_GIT_URL} and
+\code{*_GIT_TAG} values and builds it with HDF5. \\
+Tarball fetch & \code{HDF5_ALLOW_EXTERNAL_SUPPORT=TGZ} plus a
+dependency-specific \code{*_USE_EXTERNAL=ON} option &
+CMake downloads from \code{*_TGZ_ORIGPATH} and \code{*_TGZ_NAME}, or uses
+\code{TGZPATH} when the dependency-specific \code{*_USE_LOCALCONTENT=ON}
+option is set. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.3\widetablewidth}p{0.22\widetablewidth}p{0.45\widetablewidth}@{}}
+\caption{Baseline build}
+\label{tab:baseline}\\
+\hline
+\textbf{Dependency} & \textbf{Trigger} & \textbf{Notes} \\
+\hline
+CMake 3.26 or newer & Always &
+Required by the top-level \code{cmake_minimum_required()}. \\
+C compiler and native build tool & Always &
+The top-level project is a C project. \\
+Platform C library, headers, and system calls & Always &
+CMake probes standard headers, types, functions, byte order, large-file support,
+file locking, \code{pread}/\code{pwrite}, and related platform features. \\
+Platform link libraries & Platform-dependent &
+CMake adds libraries only when probes show they are needed: \code{m},
+\code{dl}, \code{rt}, \code{posix4}, \code{ucb}, \code{ws2_32},
+\code{wsock32}, and \code{shlwapi}. \\
+PkgConfig & Optional probe &
+Used only when available. It can help some find modules, such as zlib-ng and
+libaec, but it is not a hard requirement for the default build. \\
+Threads & Found in every configure; required by thread features &
+CMake searches for C11 threads, Win32 threads, or pthreads. When found, HDF5
+records thread support and links \code{Threads::Threads};
+\code{HDF5_ENABLE_THREADSAFE}, \code{HDF5_ENABLE_CONCURRENCY}, and
+\code{HDF5_ENABLE_SUBFILING_VFD} require it. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.20\widetablewidth}p{0.27\widetablewidth}p{0.20\widetablewidth}p{0.24\widetablewidth}@{}}
+\caption{HDF5 feature triggers}
+\label{tab:feature-triggers}\\
+\hline
+\textbf{Feature or component} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Parallel HDF5 & \code{HDF5_ENABLE_PARALLEL=ON} &
+MPI C with MPI-IO, MPI standard 3.0 or newer &
+Adds \code{MPI::MPI_C} to public link libraries. Parallel filtered writes and
+large parallel I/O are enabled only when the required MPI symbols are present.
+Parallel tests also need an MPI launcher such as \code{mpiexec}. \\
+Parallel Fortran & \code{HDF5_ENABLE_PARALLEL=ON},
+\code{HDF5_BUILD_FORTRAN=ON} &
+MPI Fortran &
+The Fortran build adds MPI Fortran libraries. The \code{mpi_f08} module is
+used when available. \\
+Thread-safe library & \code{HDF5_ENABLE_THREADSAFE=ON} &
+Threads &
+Unsupported with parallel, Fortran, C++, or high-level library unless
+\code{HDF5_ALLOW_UNSUPPORTED=ON}. On Windows, static libraries are rejected. \\
+Multi-threaded concurrency & \code{HDF5_ENABLE_CONCURRENCY=ON} &
+Threads &
+Experimental. Mutually exclusive with \code{HDF5_ENABLE_THREADSAFE}; has the
+same unsupported combinations as thread-safety unless overridden with
+\code{HDF5_ALLOW_UNSUPPORTED=ON}. \\
+C++ wrappers & \code{HDF5_BUILD_CPP_LIB=ON} &
+C++ compiler &
+Unsupported with parallel unless \code{HDF5_ALLOW_UNSUPPORTED=ON}.
+High-level C++ wrappers also require \code{HDF5_BUILD_HL_LIB=ON}. \\
+Fortran wrappers & \code{HDF5_BUILD_FORTRAN=ON} &
+Fortran compiler with Fortran 2003 \code{ISO_C_BINDING} support &
+Unsupported with thread-safety or concurrency unless
+\code{HDF5_ALLOW_UNSUPPORTED=ON}. High-level Fortran wrappers also require
+\code{HDF5_BUILD_HL_LIB=ON}. \\
+Java wrappers & \code{HDF5_BUILD_JAVA=ON} &
+Java/JDK, shared HDF5 libraries, Java dependency JARs &
+Java requires shared HDF5 libraries. Java 11 or newer is required for the JNI
+implementation. Java tests additionally require the JUnit and Hamcrest JARs. \\
+Java JNI implementation & \code{HDF5_BUILD_JAVA=ON},
+\code{HDF5_ENABLE_JNI=ON}, or any Java version earlier than 25 &
+JNI headers and libraries &
+JNI is the default Java implementation. HDFS also requires JNI. \\
+Java FFM implementation & \code{HDF5_BUILD_JAVA=ON}, Java 25 or newer,
+\code{HDF5_ENABLE_JNI=OFF} &
+\code{jextract} from \code{JEXTRACT_HOME/bin} or \code{JAVA_HOME/bin} &
+Generates FFM bindings at configure time. \\
+Java logging/test JARs & \code{HDF5_BUILD_JAVA=ON} &
+\code{slf4j-api}, \code{slf4j-nop}, \code{slf4j-simple}; plus JUnit 4
+and Hamcrest for tests &
+The default paths point to bundled JARs under \code{java/lib}. They can be
+overridden with \code{HDF5_JAVA_*_JAR} cache variables.
+\code{HDF5_ENABLE_MAVEN_DEPLOY=ON} generates Maven-style artifacts and POM
+files; the CMake build does not locate or run \code{mvn}. \\
+Documentation & \code{HDF5_BUILD_DOC=ON} &
+Doxygen &
+\code{HDF5_ENABLE_DOXY_WARNINGS=ON} makes Doxygen warnings fail the build. \\
+Header regeneration & \code{HDF5_GENERATE_HEADERS=ON} &
+Perl &
+Perl is optional otherwise. If it is missing, generated headers are not
+regenerated. \\
+Python examples & \code{H5EXAMPLE_BUILD_PYTHON=ON} &
+Python3 interpreter, Python development files, NumPy, h5py source, pip &
+The examples CMake project fetches \code{h5py} from Git and installs it with
+\texttt{python3 -m pip}. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.19\widetablewidth}p{0.28\widetablewidth}p{0.22\widetablewidth}p{0.22\widetablewidth}@{}}
+\caption{HDF5 filter dependency choices}
+\label{tab:filter-dependencies}\\
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Source choices} \\
+\hline
+DEFLATE filter & \code{HDF5_ENABLE_ZLIB_SUPPORT=ON},
+\code{HDF5_USE_ZLIB_NG=OFF} &
+zlib &
+System package by default; \code{ZLIB_USE_EXTERNAL=ON} can build zlib from
+Git or TGZ. \code{HDF5_USE_ZLIB_STATIC=ON} prefers a static library. \\
+DEFLATE filter through zlib-ng & \code{HDF5_ENABLE_ZLIB_SUPPORT=ON},
+\code{HDF5_USE_ZLIB_NG=ON} &
+zlib-ng &
+System package by default; \code{ZLIB_USE_EXTERNAL=ON} can build zlib-ng from
+Git or TGZ. zlib compatibility mode is detected. \\
+SZIP filter & \code{HDF5_ENABLE_SZIP_SUPPORT=ON} &
+libaec with libsz compatibility, or another package selected by
+\code{LIBAEC_PACKAGE_NAME} &
+System package by default; \code{SZIP_USE_EXTERNAL=ON} can build libaec from
+Git or TGZ. \code{HDF5_USE_LIBAEC_STATIC=ON} prefers static libraries. \\
+HDF5 filter plugins project & \code{HDF5_ENABLE_PLUGIN_SUPPORT=ON} &
+Installed \code{h5pl}/HDF5 filter plugins package, or the
+\code{hdf5_plugins} project &
+\code{PLUGIN_USE_EXTERNAL=ON} can build the plugin project from Git or TGZ.
+Plugin support is disabled for the 1.6 API. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.19\widetablewidth}p{0.28\widetablewidth}p{0.22\widetablewidth}p{0.22\widetablewidth}@{}}
+\caption{HDF5 VFD and VOL connector dependency choices}
+\label{tab:vfd-vol-dependency-choices}\\
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Direct VFD & \code{HDF5_ENABLE_DIRECT_VFD=ON} &
+POSIX \code{O_DIRECT} and \code{posix_memalign()} support &
+No third-party library. Configuration fails if the platform support is missing. \\
+Mirror VFD & \code{HDF5_ENABLE_MIRROR_VFD=ON} &
+POSIX socket/fork headers and functions &
+No third-party library. Requires \code{netinet/in.h}, \code{netdb.h},
+\code{arpa/inet.h}, \code{sys/socket.h}, and \code{fork()}. \\
+ROS3 VFD & \code{HDF5_ENABLE_ROS3_VFD=ON} &
+\code{aws-c-s3} CMake package &
+HDF5 does not fetch this library. Building \code{aws-c-s3} from source can
+also require AWS C libraries such as \code{aws-c-common},
+\code{aws-checksums}, \code{aws-c-cal}, \code{aws-c-io},
+\code{aws-c-compression}, \code{aws-c-http}, \code{aws-c-sdkutils},
+\code{aws-c-auth}, and, on Linux, \code{aws-lc} and \code{s2n-tls}.
+ROS3 docker-proxy tests additionally require \code{docker} and the AWS CLI. \\
+HDFS VFD & \code{HDF5_ENABLE_HDFS=ON} &
+JNI/JVM and Hadoop \code{libhdfs} &
+\code{HADOOP_HOME} is used to locate \code{hdfs.h}, \code{libhdfs},
+and the Hadoop version command. Non-MSVC builds also add \code{-pthread}. \\
+Subfiling VFD and IOC VFD & \code{HDF5_ENABLE_PARALLEL=ON},
+\code{HDF5_ENABLE_SUBFILING_VFD=ON} &
+MPI C with \code{MPI_Comm_split_type}, plus Threads &
+Not available on Windows. IOC VFD is built when subfiling is enabled. \\
+External VOL connectors & \code{HDF5_VOL_ALLOW_EXTERNAL=GIT} or
+\code{LOCAL_DIR} with \code{HDF5_VOL_URLnn} or \code{HDF5_VOL_PATHnn} &
+Connector-defined &
+Up to ten CMake-based VOL connectors can be added. HDF5 patches connector CMake
+code to use the in-tree HDF5 build, but each connector may bring its own
+dependencies. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.21\widetablewidth}p{0.29\widetablewidth}p{0.20\widetablewidth}p{0.21\widetablewidth}@{}}
+\caption{Tools, Tests, and Security Features}
+\label{tab:tools-tests-security-features}\\
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Signed plugin verification & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON} &
+OpenSSL libcrypto 1.1.0 or newer &
+Adds \code{OpenSSL::Crypto} to HDF5. \code{HDF5_LOCK_PLUGIN_KEYSTORE=ON}
+also requires \code{HDF5_PLUGIN_KEYSTORE_DIR}. \\
+\code{h5sign} tool & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\code{HDF5_BUILD_TOOLS=ON} &
+OpenSSL libcrypto &
+Used to sign HDF5 plugins. \\
+Signed-plugin tests & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\code{BUILD_TESTING=ON} &
+\code{openssl} executable &
+Tests generate RSA keys with the OpenSSL command-line tool. \\
+Parallel tools utilities & \code{HDF5_ENABLE_PARALLEL=ON},
+\code{HDF5_BUILD_PARALLEL_TOOLS=ON} &
+MFU, CIRCLE, DTCMP &
+CMake looks for headers and libraries, using \code{MFU_ROOT} as a hint. \\
+API test driver & \code{BUILD_TESTING=ON},
+\code{HDF5_TEST_API_ENABLE_DRIVER=ON} &
+KWSys &
+The test driver fetches KWSys from a tarball or from \code{TGZPATH} when
+\code{KWSYS_USE_LOCALCONTENT=ON}. \\
+Shell-script tests & \code{BUILD_TESTING=ON} &
+PowerShell or Bash &
+CMake uses \code{pwsh}/\code{powershell} when available; otherwise Unix
+builds look for \code{bash}. \\
+ROS3 VFD tests & \code{HDF5_ENABLE_ROS3_VFD=ON},
+\code{HDF5_ENABLE_ROS3_VFD_DOCKER_PROXY=ON} &
+Docker daemon and AWS CLI &
+Used to run S3 proxy tests. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.21\widetablewidth}p{0.29\widetablewidth}p{0.20\widetablewidth}p{0.21\widetablewidth}@{}}
+\caption{Tools, Tests, and Security Features}
+\label{tab:tools-tests-security-features}\\
+\hline
+\textbf{Feature} & \textbf{Build options} & \textbf{Dependency} &
+\textbf{Notes} \\
+\hline
+Signed plugin verification & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON} &
+OpenSSL libcrypto 1.1.0 or newer &
+Adds \code{OpenSSL::Crypto} to HDF5. \code{HDF5_LOCK_PLUGIN_KEYSTORE=ON}
+also requires \code{HDF5_PLUGIN_KEYSTORE_DIR}. \\
+\code{h5sign} tool & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\code{HDF5_BUILD_TOOLS=ON} &
+OpenSSL libcrypto &
+Used to sign HDF5 plugins. \\
+Signed-plugin tests & \code{HDF5_REQUIRE_SIGNED_PLUGINS=ON},
+\code{BUILD_TESTING=ON} &
+\code{openssl} executable &
+Tests generate RSA keys with the OpenSSL command-line tool. \\
+Parallel tools utilities & \code{HDF5_ENABLE_PARALLEL=ON},
+\code{HDF5_BUILD_PARALLEL_TOOLS=ON} &
+MFU, CIRCLE, DTCMP &
+CMake looks for headers and libraries, using \code{MFU_ROOT} as a hint. \\
+API test driver & \code{BUILD_TESTING=ON},
+\code{HDF5_TEST_API_ENABLE_DRIVER=ON} &
+KWSys &
+The test driver fetches KWSys from a tarball or from \code{TGZPATH} when
+\code{KWSYS_USE_LOCALCONTENT=ON}. \\
+Shell-script tests & \code{BUILD_TESTING=ON} &
+PowerShell or Bash &
+CMake uses \code{pwsh}/\code{powershell} when available; otherwise Unix
+builds look for \code{bash}. \\
+ROS3 VFD tests & \code{HDF5_ENABLE_ROS3_VFD=ON},
+\code{HDF5_ENABLE_ROS3_VFD_DOCKER_PROXY=ON} &
+Docker daemon and AWS CLI &
+Used to run S3 proxy tests. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.25\widetablewidth}p{0.34\widetablewidth}p{0.32\widetablewidth}@{}}
+\caption{Developer and Packaging Dependencies}
+\label{tab:developer-packaging-dependencies}\\
+\hline
+\textbf{Configuration} & \textbf{Build options} & \textbf{Dependency} \\
+\hline
+Analyzer tooling & \code{HDF5_ENABLE_ANALYZER_TOOLS=ON} &
+\code{clang-tidy}, \code{include-what-you-use}, and \code{cppcheck}
+are probed and used by the analyzer macros. \\
+Source formatting targets & \code{HDF5_ENABLE_FORMATTERS=ON} &
+\code{clang-format} and \code{cmake-format}. \\
+Code coverage with Clang/IntelLLVM & \code{HDF5_ENABLE_COVERAGE=ON},
+\code{CODE_COVERAGE=ON} &
+\code{llvm-cov} and \code{llvm-profdata}; AppleClang uses
+\texttt{xcrun llvm-cov} and \texttt{xcrun llvm-profdata}. \\
+Code coverage with GCC & \code{HDF5_ENABLE_COVERAGE=ON},
+\code{CODE_COVERAGE=ON} &
+\code{lcov} and \code{genhtml}; fallback instrumentation can also link
+\code{gcov}. \\
+Sanitizers & \code{HDF5_ENABLE_SANITIZERS=ON},
+\code{HDF5_USE_SANITIZER=<kind>} &
+Compiler sanitizer runtime support. Supported values depend on compiler and
+platform. \\
+AFL support module & Explicit inclusion of
+\code{config/sanitizer/afl-fuzzing.cmake} &
+\code{afl-cc} and \code{afl-c++}. This module is available but is not
+included by the top-level HDF5 build by default. \\
+Dependency graph support module & Explicit inclusion of
+\code{config/sanitizer/dependency-graph.cmake} &
+Graphviz \code{dot}. This module is available but is not included by the
+top-level HDF5 build by default. \\
+Windows installers & CPack on Windows &
+NSIS and WiX are probed when available. \\
+Linux packages & CPack on Unix-like systems &
+\code{dpkg-shlibdeps} enables DEB generation; \code{rpmbuild} enables RPM
+generation for non-parallel builds. \\
+\hline
+\end{longtable}
+\endgroup
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.21\widetablewidth}p{0.19\widetablewidth}p{0.51\widetablewidth}@{}}
+\caption{External Source Defaults}
+\label{tab:external-source-defaults}\\
+\hline
+\textbf{Dependency} & \textbf{Default version/tag} & \textbf{Default source} \\
+\hline
+zlib & \code{1.3.2} / \code{v1.3.2} &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz} \\
+zlib-ng & \code{2.3.3} &
+\url{https://github.com/zlib-ng/zlib-ng.git} or
+\url{https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz} \\
+libaec & \code{1.1.6} / \code{v1.1.6} &
+\url{https://github.com/MathisRosenhauer/libaec.git} or
+\url{https://github.com/MathisRosenhauer/libaec/releases/download/v1.1.6/libaec-1.1.6.tar.gz} \\
+HDF5 filter plugins & \code{master} &
+\url{https://github.com/HDFGroup/hdf5_plugins.git} or
+\url{https://github.com/HDFGroup/hdf5_plugins/releases/download/snapshot/hdf5_plugins-master.tar.gz} \\
+KWSys API-test helper & \code{master} tarball &
+\url{https://gitlab.kitware.com/utils/kwsys/-/archive/master/kwsys-master.tar.gz} \\
+h5py Python examples & \code{master} &
+\url{https://github.com/h5py/h5py.git} \\
+bitshuffle & \code{master} or \code{0.5.2} tarball &
+\url{https://github.com/kiyo-masui/bitshuffle.git} or
+\url{https://github.com/kiyo-masui/bitshuffle/archive/refs/tags/bitshuffle-0.5.2.tar.gz} \\
+Blosc & \code{1.21.6} &
+\url{https://github.com/Blosc/c-blosc.git} or
+\url{https://github.com/Blosc/c-blosc/archive/refs/tags/c-blosc-1.21.6.tar.gz} \\
+Blosc zlib helper & \code{develop} or \code{1.3.1} tarball &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz} \\
+Blosc2 & \code{2.17.1} &
+\url{https://github.com/Blosc/c-blosc2.git} or
+\url{https://github.com/Blosc/c-blosc2/archive/refs/tags/c-blosc2-2.17.1.tar.gz} \\
+Blosc2 zlib helper & \code{develop} or \code{1.3.1} tarball &
+\url{https://github.com/madler/zlib.git} or
+\url{https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz} \\
+bzip2 & \code{bzip2-1.0.8} &
+\url{https://github.com/libarchive/bzip2.git} or
+\url{https://github.com/libarchive/bzip2/archive/refs/tags/bzip2-bzip2-1.0.8.tar.gz} \\
+fpzip & \code{develop} or \code{1.3.0} tarball &
+\url{https://github.com/LLNL/fpzip.git} or
+\url{https://github.com/LLNL/fpzip/releases/download/1.3.0/fpzip-1.3.0.tar.gz} \\
+JPEG & \code{jpeg-9e} &
+\url{https://github.com/libjpeg-turbo/libjpeg-turbo.git} or
+\url{https://www.ijg.org/files/jpegsrc.v9e.tar.gz} \\
+LZ4 & \code{dev} or \code{1.10.0} tarball &
+\url{https://github.com/lz4/lz4.git} or
+\url{https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz} \\
+LZF & \code{3.6} tarball &
+\url{http://dist.schmorp.de/liblzf/liblzf-3.6.tar.gz} \\
+SZ & \code{master} or \code{2.1.12.5} tarball &
+\url{https://github.com/szcompressor/SZ.git} or
+\url{https://github.com/szcompressor/SZ/releases/download/v2.1.12.5/SZ-2.1.12.5.tar.gz} \\
+ZFP & \code{develop} or \code{1.0.1} tarball &
+\url{https://github.com/LLNL/zfp.git} or
+\url{https://github.com/LLNL/zfp/releases/download/1.0.0/zfp-1.0.1.tar.gz} \\
+Zstandard & \code{1.5.7} &
+\url{https://github.com/facebook/zstd.git} or
+\url{https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz} \\
+\hline
+\end{longtable}
+\endgroup
+
+\end{document}

@@ -12,6 +12,7 @@
 \let\oldtextunderscore\_
 \renewcommand{\_}{\oldtextunderscore\allowbreak}
 
+\DeclareRobustCommand{\code}[1]{\nolinkurl{#1}}
 
 % Callout box for out-of-scope notices
 \usepackage[skins]{tcolorbox}
@@ -119,5 +120,11 @@
 
 % Appendices
 \appendix
+
+\newpage
+\subfile{appendices/cve-history-summary}
+
+\newpage
+\subfile{appendices/supply-chain-details}
 
 \end{document}
