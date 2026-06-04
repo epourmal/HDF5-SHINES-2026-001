@@ -1,0 +1,26 @@
+\documentclass[../main.tex]{subfiles}
+
+\begin{document}
+
+%% ======================================================================
+%%  Section 6 – Applications using HDF5
+%% ======================================================================
+\section{Applications using HDF5}
+\label{sec:applications}
+
+Applications treat HDF5 as inert data, but HDF5 files can carry
+behavior-relevant metadata: paths, external references, huge
+declared shapes, filter/plugin requirements, serialized
+application objects, and model-layer definitions. That creates
+integration bugs even when the HDF5 library is behaving as
+designed.
+
+The HDF Group's security policy~\cite{hdf5-sec-pol} already attempts the right scope
+distinction: core libhdf5, official tools, Remote Code Excution (RCE)
+via parsing/API abuse, and supply-chain compromise are in scope;
+third-party plugins and application-level usage are usually
+triaged or referred to their maintainers
+
+
+
+\end{document}
