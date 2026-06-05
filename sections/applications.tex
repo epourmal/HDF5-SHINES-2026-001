@@ -1,0 +1,366 @@
+\documentclass[../main.tex]{subfiles}
+
+\begin{document}
+
+%% ======================================================================
+%%  Section 6 – Applications using HDF5
+%% ======================================================================
+\section{Applications using HDF5}
+\label{sec:applications}
+
+Applications treat HDF5 as inert data, but HDF5 files can carry
+behavior-relevant metadata: paths, external references, huge
+declared shapes, filter/plugin requirements, serialized
+application objects, and model-layer definitions. That creates
+integration bugs even when the HDF5 library is behaving as
+designed.
+
+The HDF Group's security policy~\cite{hdf5-sec-pol} already attempts the right scope
+distinction: core libhdf5, official tools, Remote Code Execution (RCE)
+via parsing/API abuse, and supply-chain compromise are in scope;
+third-party plugins and application-level usage are usually
+triaged or referred to their maintainers.
+
+\begingroup
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+
+\begin{longtable}{@{}p{0.18\widetablewidth}p{0.18\widetablewidth}p{0.32\widetablewidth}p{0.28\widetablewidth}@{}}
+\caption{Common application-level HDF5 failure families}
+\label{tab:application-hdf5-failure-families}\\
+\hline
+\textbf{Family} & \textbf{Typical failure} & \textbf{Examples} & \textbf{Why it is common} \\
+\hline
+\endfirsthead
+
+\caption[]{Common application-level HDF5 failure families, continued}\\
+\hline
+\textbf{Family} & \textbf{Typical failure} & \textbf{Examples} & \textbf{Why it is common} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+malformed file metadata reaches C memory code &
+buffer overflow, over-read, UAF, double-free, null dereference, divide-by-zero &
+many HDFGroup records, including 2024 and 2025 issues in object headers, datatypes, dataspaces, filters, heaps, free-space metadata, and cache images &
+HDF5 is a complex binary metadata graph, not a flat byte container\\
+application deserialization layered on HDF5 &
+arbitrary code execution &
+Keras CVE-2025-9905: crafted \code{.h5/.hdf5} model archives can execute code
+because legacy \code{.h5} loading did not honor \code{safe_mode=True} for
+\code{Lambda}-layer pickled code~\cite{cve-2025-9905}. &
+ML frameworks often use HDF5 as a model container, then deserialize
+framework-level objects from it. \\
+external references and file path indirection &
+arbitrary local file read, path traversal, data exfiltration &
+Keras CVE-2026-1669: crafted \code{.keras} model file using HDF5 external
+dataset references could read local files~\cite{cve-2026-1669}. &
+HDF5 supports links and external storage mechanisms. External links store both
+target filename and object path; external storage can resolve raw-data files
+through prefixes and current working directory rules~\cite{hdf5-data-model}. \\
+unbounded resource allocation &
+memory exhaustion / interpreter crash &
+Keras CVE-2026-0897: crafted \code{.keras} archive with
+\code{model.weights.h5} declaring an extremely large dataset shape could exhaust
+memory and crash Python~\cite{cve-2026-0897}. &
+HDF5 metadata can declare logical shapes much larger than the actual useful
+payload; application code may allocate based on declared shape before policy
+checks. \\
+dynamic plugin loading and search paths &
+local privilege escalation / arbitrary code loading &
+TensorFlow CVE-2026-2492: HDF5 plugin handling loaded plugins from an unsecured
+location, enabling local privilege escalation~\cite{cve-2026-2492}. &
+HDF5 supports dynamic plugin loading, and plugin paths can be affected by
+defaults or \code{HDF5_PLUGIN_PATH}; dynamic loading can also be disabled via
+\code{H5PLset_loading_state()} or
+\code{HDF5_PLUGIN_PRELOAD=::}~\cite{hdf5-dynamic-plugins}. \\
+vulnerable or stale embedded HDF5 copies &
+inherited CVEs, unpatched parser behavior &
+matio CVE-2021-36977 involved a heap overflow related to use of HDF5
+1.12.0; Apple CVE-2021-31009 says multiple issues were addressed by removing
+HDF5~\cite{cve-2021-36977,cve-2021-31009}. &
+Downstream products vendor, statically link, or lag HDF5 releases;
+vulnerability scanners then attribute HDF5 defects to the application. \\
+helper-tool exposure &
+crashes or code execution through inspection/conversion utilities &
+\code{h5dump} appears in older and newer issues; CVE-2026-34734 describes a
+heap-use-after-free in the \code{h5dump} helper utility triggered by a malicious
+\code{.h5} file~\cite{cve-2026-34734}. &
+Applications often call \code{h5dump}, \code{h5repack}, or converters as
+``safe inspection'' tools on untrusted files. \\
+\end{longtable}
+\endgroup
+
+\paragraph{The unifying root cause:} The repeated mistake is \textit{trust-boundary confusion}.
+HDF5 sits at the boundary between a file and the process.
+Downstream frameworks often add another boundary: model loading,
+dataset ingestion, scientific workflow execution, browser upload,
+cloud service processing, or plugin resolution. Many CVEs happen
+because those layers collapse into one assumption: “This is just an HDF5 file, so reading it is safe.”
+That assumption is false. An HDF5 file can influence:
+
+\begin{itemize}
+    \item memory allocation size
+    \item dataset rank and shape
+    \item chunk count and cache pressure
+    \item filter/plugin loading
+    \item external file lookup
+    \item link traversal
+    \item datatype conversion
+    \item application-level model reconstruction
+    \item tool output rendering
+\end{itemize}
+
+The common issue is \textbf{unsafe interpretation of HDF5-controlled
+metadata at the application boundary.}
+
+\subsection{Audit Findings and Mitigation Priorities}
+
+Mitigation has to be layered. Patching \texttt{libhdf5}
+alone will not fix Keras model deserialization, TensorFlow plugin
+path handling, or application-level external-reference policy.
+
+\subsubsection*{Priority 1: Define an “untrusted HDF5” profile}
+
+HDF5 should offer, and downstreams should use, a strict profile
+for any file received from users, networks, archives, model hubs,
+object stores, email, web uploads, or third-party datasets.
+
+Default behavior for that profile:
+\begin{verbatim}
+dynamic plugins disabled
+external links disabled or sandboxed
+external raw dataset storage disabled or sandboxed
+VDS source traversal restricted
+maximum rank enforced
+maximum element count enforced
+maximum allocation size enforced
+maximum metadata bytes enforced
+maximum chunk count enforced
+maximum filter expansion ratio enforced
+cycles and deep graph traversal rejected
+unknown or legacy-dangerous messages rejected
+    unless explicitly allowed    
+\end{verbatim}
+
+Today, pieces exist: plugin loading can be controlled, and all dynamic plugins
+can be disabled with \code{H5PLset_loading_state(0)} or \code{HDF5_PLUGIN_PRELOAD=::}.
+But this needs to become a cohesive security profile, not a set of hidden knobs.
+
+\subsubsection*{Priority 2: Ship a preflight validator}
+
+Create a validator that reads metadata only and returns a policy decision before the application allocates large arrays or deserializes model objects.
+
+Example output:
+\begin{minted}{json}
+{
+  "safe_for_untrusted_load": false,
+  "reasons": [
+    "external dataset reference outside sandbox",
+    "dataset declares 8.7 TB logical size",
+    "requires dynamic filter plugin",
+    "contains legacy Keras Lambda layer metadata"
+  ]
+}    
+\end{minted}
+
+For core HDF5, this validator should reason about file-format invariants.
+For downstreams, it should expose application hooks:
+
+\begin{verbatim}
+on_external_reference(path)
+on_dataset_shape(path, dtype, shape, logical_bytes)
+on_filter_required(filter_id)
+on_link_traversal(source, target)
+on_attribute(name, size)
+\end{verbatim}
+
+Keras and TensorFlow could then enforce model-specific policy before creating Python objects.
+
+\subsubsection*{Priority 3: Disable dangerous HDF5 features by default in ML model loading}
+
+ML loaders should not behave like general HDF5 viewers.
+
+For Keras/TensorFlow-style use:
+\begin{verbatim}
+do not allow Lambda or pickled code from legacy .h5
+do not allow external dataset references
+do not allow dynamic HDF5 plugins
+do not eagerly allocate declared tensors before checking total
+    byte budget
+do not resolve paths relative to current working
+    directory
+do not honor HDF5_PLUGIN_PATH in model loading
+    contexts
+\end{verbatim}   
+This directly addresses the Keras arbitrary-code issue, the Keras arbitrary-file-read issue, the Keras memory-exhaustion
+issue, and the TensorFlow plugin-search-path issue.
+
+\subsubsection*{Priority 4: Make external references opt-in}
+
+External links and external raw dataset storage are legitimate HDF5 features,
+but they are unsafe defaults for hostile content.
+HDF5 documentation states that external links store a target
+filename and object path, and external dataset storage search
+behavior can involve the current working directory, absolute
+paths, relative paths, \code{${ORIGIN}}, and \code{HDF5_EXTFILE_PREFIX}.
+
+Mitigation:
+\begin{verbatim}
+reject absolute external paths
+reject path traversal
+reject current-working-directory lookup
+require explicit sandbox root
+require explicit allowlist by extension or path
+log every external resolution
+never follow external references during metadata
+    preview
+\end{verbatim}
+
+For services, the safest default is: \code{external references = off}.
+
+\subsubsection*{Priority 5: Treat plugins as executable code}
+
+HDF5 filter plugins, VOL connectors, and VFDs are not data.
+They are code. The HDF5 docs state that plugins are shared
+libraries and that the default path can be overwritten by
+\code{HDF5_PLUGIN_PATH}. That is enough to create an
+application-level vulnerability if a privileged process uses an
+attacker-controlled path.
+
+Mitigation:
+\begin{verbatim}
+clear HDF5_PLUGIN_PATH, HDF5_PLUGIN_PRELOAD,
+    HDF5_EXTFILE_PREFIX in services
+set plugin loading state explicitly at process start
+allow plugins only from root/admin-owned directories
+reject writable plugin directories
+require hashes or signatures for plugins
+never load plugins in setuid, service, notebook-hub,
+    web-worker, or privileged contexts unless explicitly
+    allowlisted
+\end{verbatim}
+
+Sandboxing plugins\ldots
+
+\subsubsection*{Priority 6: Require downstream SBOM and version reporting}
+
+Downstream projects should report:
+\begin{verbatim}
+HDF5 version
+linkage type: static / dynamic / vendored / system
+enabled filters
+enabled VOL/VFD connectors
+plugin search path policy
+external-reference policy
+safe-mode policy
+\end{verbatim}
+
+This solves a practical problem: a user seeing “HDF5 CVE” in a
+scanner often cannot tell whether they are affected through
+\code{libhdf5}, an official tool, a vendored copy, a Python wheel,
+a model loader, or a plugin.
+
+\subsubsection*{Priority 7: Split CVE classification into scope tags}
+
+For HDF5-related CVE triage, use explicit tags:
+\begin{verbatim}
+HDF5-core-parser
+HDF5-official-tool
+HDF5-legacy-tool
+HDF5-plugin-loading
+HDF5-external-reference
+HDF5-downstream-deserialization
+HDF5-downstream-resource-policy
+HDF5-vendored-library
+not-HDF5
+duplicate/rejected
+\end{verbatim}
+
+This avoids bad prioritization. A heap overflow in
+\code{H5T__conv_struct_opt} is not the same class as Keras
+ignoring \code{safe_mode} for legacy \code{.h5} files, even though both
+mention HDF5.
+
+\subsubsection*{A practical mitigation matrix for downstream maintainers}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTleft}{-0.7in}
+\setlength{\LTright}{-0.7in}
+\begin{longtable}{@{}p{0.25\widetablewidth}p{0.71\widetablewidth}@{}}
+\caption{Minimum safe policies for downstream HDF5 use cases}
+\label{tab:downstream-hdf5-safe-policies}\\
+\hline
+\textbf{Downstream use case} & \textbf{Minimum safe policy} \\
+\hline
+\endfirsthead
+
+\caption[]{Minimum safe policies for downstream HDF5 use cases, continued}\\
+\hline
+\textbf{Downstream use case} & \textbf{Minimum safe policy} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\hline
+\endlastfoot
+
+viewing unknown \code{.h5} files &
+run in a sandbox; disable plugins; disable external references; cap metadata
+and output size \\
+loading ML models &
+never load untrusted legacy \code{.h5}; disable Lambda/pickled code; validate
+tensor shapes before allocation \\
+cloud upload service &
+preflight only; no plugin loading; no external file access; resource limits;
+process isolation \\
+HPC workflow &
+separate trusted internal files from imported files; scrub environment; pin
+plugin directories; use module-level HDF5 version floors \\
+desktop scientific app &
+prompt before following external references; ship patched HDF5; avoid writable
+global plugin dirs \\
+package/distribution &
+publish SBOM; expose HDF5 version; rebuild promptly after HDF5 security
+releases \\
+library binding &
+expose security controls in the binding API, not just through environment
+variables \\
+\end{longtable}
+\endgroup
+
+\paragraph{What The HDF Group can do to reduce downstream CVEs:}
+The most useful move is not just more parser hardening.
+It is to give downstreams safe controls that are easy to use.
+
+Recommended deliverables:
+\begin{verbatim}
+H5Pset_security_profile(fapl, H5_SECURITY_PROFILE_UNTRUSTED)
+H5Pset_external_reference_policy(fapl, H5_EXTREF_DENY
+    | H5_EXTREF_SANDBOX)
+H5Pset_plugin_policy(fapl, H5_PLUGIN_DENY
+    | H5_PLUGIN_ALLOWLIST)
+H5Pset_max_logical_dataset_bytes(fapl, n)
+H5Pset_max_metadata_bytes(fapl, n)
+H5Pset_max_object_count(fapl, n)
+H5Pset_max_link_traversal_depth(fapl, n)
+h5validate --profile untrusted --json file.h5
+\end{verbatim}
+
+Then publish downstream recipes for Keras, TensorFlow, h5py,
+netCDF, MATLAB, R, Java, and cloud services.
+
+\end{document}
