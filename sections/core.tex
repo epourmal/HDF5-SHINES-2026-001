@@ -42,7 +42,7 @@ the self-referential continuation-message fix checks expected versus actual
 deserialized object-header chunks; and the cache-image fix added buffer-size
 arguments, overflow checks, input validation, and cleanup.)
 
-The strategic root-cause categories are tighter than the CVE count
+The major root-cause categories are tighter than the CVE count
 suggests, and are summarized in Table~\ref{tab:hdf5-cve-root-cause-categories}.
 
 \begingroup
@@ -54,14 +54,14 @@ suggests, and are summarized in Table~\ref{tab:hdf5-cve-root-cause-categories}.
 \setlength{\LTright}{-0.7in}
 
 \begin{longtable}{@{}p{0.28\widetablewidth}p{0.68\widetablewidth}@{}}
-\caption{Strategic root-cause categories in the HDF5 CVE history}
+\caption{Major root-cause categories in the HDF5 CVE history}
 \label{tab:hdf5-cve-root-cause-categories}\\
 \hline
 \textbf{Root-cause category} & \textbf{What it means for HDF5} \\
 \hline
 \endfirsthead
 
-\caption[]{Strategic root-cause categories in the HDF5 CVE history, continued}\\
+\caption[]{Major root-cause categories in the HDF5 CVE history, continued}\\
 \hline
 \textbf{Root-cause category} & \textbf{What it means for HDF5} \\
 \hline
@@ -89,10 +89,12 @@ b-tree, filter, and dataspace paths. \\
 unsafe cleanup/lifetime paths &
 Use-after-free, double-free, leaks, and null dereferences show that malformed input
 often breaks unwinding logic as much as the primary decode logic. \\
+unbounded traversal, recursion, loop-progress, and resource-limit failures & 
+External-reference/path-opening behavior is a policy boundary, not necessarily a parser memory-safety defect.\\
 legacy tool attack surface &
 \code{gif2h5}, HDF to GIF conversion, \code{h5dump}, and \code{h5repack} appear
 repeatedly. Removal of \code{gif2h5} was a structural mitigation, not just a patch. \\
-incomplete triage metadata &
+triage quality, duplicate/variant clustering, reachability, and fix-completeness metadata &
 Several entries have \code{commit_url: null}, ``not filed against HDF5,'' ``cannot
 reproduce,'' ``not applicable,'' or tentative confidence. Those should not be counted
 as reviewed HDF5 fixes without qualification. \\
