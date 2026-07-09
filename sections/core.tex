@@ -101,7 +101,188 @@ as reviewed HDF5 fixes without qualification. \\
 \end{longtable}
 \endgroup
 
-\subsection{Footprints, Fingerprints, Controls -- HDF5 Privacy}
+\subsection{HDF5 Privacy: Assets and Exposure}
+
+\subsubsection{Introduction} 
+
+Privacy risks in the HDF5 core library and file format are not accidental; as discussed
+in the Introduction, they are systematic and arise from multiple factors. The design and
+implementation of the HDF5 file format and library present one important source of such risks.
+Additional risks emerge from scientific workflows, software ecosystems, interoperability
+mechanisms, and evolving data usage contexts.
+
+Before describing the assets that require protection in HDF5 and the mechanisms through
+which privacy exposure may occur, it is important to emphasize several fundamental
+characteristics of HDF5 and the audit approach adopted in this document.
+
+\begin{itemize}
+    \item \emph{HDF5 privacy primarily concerns accidental or unintended exposure of sensitive information
+          rather than malicious attacksi}. Malicious attacks and unauthorized access are primarily
+          addressed through cybersecurity mechanisms and are outside the scope of this section.
+    \item \emph{HDF5, by design, does not provide privacy protections}. When privacy is a concern, users and organizations
+           are responsible for protecting data throughout the entire data lifecycle. In this document,
+           the term data refers not only to individual HDF5 objects within a single file, but also to
+           collections of HDF5 files and external data accessible through the HDF5 library,
+           connectors, and related software components.
+    \item \emph{HDF5 neither implements nor enforces privacy standards}. Furthermore, even when privacy
+          standards and technical safeguards are in place, sensitive information may still be exposed
+          through legitimate data processing, contextual interpretation, pattern discovery, inference,
+          aggregation, and other analytical activities.
+    \item \emph{HDF5 does not manage authentication, authorization, or filesystem protection}. However, privacy
+          risks extend beyond traditional security concerns. Sensitive information may be exposed during
+          legitimate data use by authorized users, even within highly secure computing environments.
+    \item \emph{The risk of sensitive information exposure generally increases over the data lifecycle}.
+          Sensitive information stored in HDF5 may be exposed during any stage of the lifecycle,
+          including data creation, processing, storage, sharing, transfer, reuse, and archival.
+    \item \emph{HDF5 extensibility mechanisms and associated software ecosystems may alter the privacy characteristics of data}.
+          Features such as filters, Virtual Object Layer (VOL) connectors, Virtual File Drivers (VFDs), and
+          external applications, including conversion and analysis tools, may introduce new privacy
+          exposure surfaces or modify existing ones.
+\end{itemize}
+
+The remainder of this section focuses on the assets that require protection in HDF5, the mechanisms
+through which sensitive information may be exposed, and potential approaches for mitigating privacy risks.
+
+\subsubsection{HDF5 Assets and their Exposure}
+
+The primary assets requiring protection are the scientific data themselves.
+In HDF5, these include data stored in HDF5 objects, such as files, groups, datasets, datatypes,
+and dataspaces, which represent experimental observations, measurements, simulations, images,
+sensor outputs, and computational results.
+
+Scientific data may be exposed through direct access using HDF5-based software,
+including command-line utilities, graphical viewers, and programming interfaces such as Python.
+However, privacy-sensitive information may also be inferred through examination of the 
+low-level storage organization and auxiliary metadata embedded within the file to support 
+portability, interoperability, and efficient data access. For example, string attributes 
+visible through standard operating system utilities (e.g., the Unix strings command) may 
+disclose dataset names, experimental identifiers, or other descriptive information. 
+Similarly, inspection of dataset headers may reveal storage layout, chunk organization, 
+compression methods, or data acquisition patterns (e.g., frame-based acquisition stored 
+as chunked datasets). Examination of embedded strings may also disclose the use of 
+external storage or references to datasets located in other HDF5 files.
+
+It is important to distinguish between protecting access to data values and protecting information 
+about data representation. Even when raw data are protected through mechanisms such as 
+compression or encryption, information describing their storage organization, layout, or 
+access methods may remain accessible and reveal sensitive contextual information about the 
+underlying data or the processes that generated them.
+
+\paragraph{Data Assets}
+
+The primary assets requiring protection are the scientific data themselves. In HDF5, these 
+include data stored in HDF5 objects, such as files, groups, datasets, datatypes, and dataspaces, 
+which represent experimental observations, measurements, simulations, images, 
+sensor outputs, and computational results.
+
+Scientific data may be exposed through direct access using HDF5-based software, including 
+command-line utilities, graphical viewers, and programming interfaces such as Python. 
+However, privacy-sensitive information may also be inferred through examination of the low-level 
+storage organization and auxiliary metadata embedded within the file to support portability, 
+interoperability, and efficient data access. For example, string attributes visible through 
+standard operating system utilities (e.g., the Unix strings command) may disclose dataset 
+names, experimental identifiers, or other descriptive information. Similarly, inspection 
+of dataset headers may reveal storage layout, chunk organization, compression methods, 
+or data acquisition patterns (e.g., frame-based acquisition stored as chunked datasets). 
+Examination of embedded strings may also disclose the use of external storage or references 
+to datasets located in other HDF5 files.
+
+It is important to distinguish between protecting access to data values and protecting 
+information about data representation. Even when raw data are protected through mechanisms 
+such as compression or encryption, information describing their storage organization, layout, 
+or access methods may remain accessible and reveal sensitive contextual information about 
+the underlying data or the processes that generated them.
+
+
+\paragraph{Metadata Assets}
+
+User-defined metadata often constitute one of the most privacy-sensitive asset classes in HDF5. 
+The format was intentionally designed as a self-describing data model that allows extensive 
+contextual information to be stored alongside scientific data. While HDF5 attributes are the most 
+recognizable form of user-defined metadata, they represent only one category of descriptive 
+information maintained within an HDF5 file.
+
+User-defined metadata include all user-created HDF5 objects and object properties that organize, 
+identify, or describe stored data. These include groups, datasets, their associated datatypes 
+and dataspaces, committed datatypes, and attributes attached to HDF5 objects. 
+Each HDF5 attribute is itself a structured metadata object with a name, datatype, and dataspace. 
+Additional metadata assets include file and object names (link names), committed datatype names, 
+compound datatype member names, enumeration labels, object comments, and information 
+stored in the user block. Collectively, these metadata describe the logical organization, 
+semantics, and relationships of the stored data and frequently contain experiment-specific, 
+operational, or organizational information.
+
+Like scientific data, metadata assets may be exposed not only through HDF5 applications but 
+also through direct examination of the binary file format. Inspection of file structures or 
+extraction of embedded strings without using HDF5 software may reveal object names, 
+descriptive attributes, storage relationships, user block contents, and other contextual 
+information that could disclose sensitive information about the data, their origin, 
+or the organization that produced them.
+
+\paragraph{Structural Metadata Assets}
+
+Privacy-sensitive information may also be inferred from the structural characteristics of HDF5 files. 
+Structural metadata assets include user-defined organizational structures, such as 
+the hierarchical arrangement of objects, dataset storage layouts (e.g., contiguous, chunked, 
+compact, or external storage), filter pipelines, and relationships established through links, 
+object references, region references, or virtual datasets (VDS). In addition, the HDF5 library 
+maintains internal structural metadata that describe and manage these user-defined structures, 
+including chunk indexing schemes, B-tree organizations, and other implementation-specific data structures.
+
+Even when raw data are inaccessible, for example, because they are encrypted, compressed, 
+stored externally, or protected by file-system access controls, structural metadata may 
+disclose information about the purpose of the data, experimental design, workflow organization, 
+relationships among datasets, or assumptions made by the generating application. 
+Naming hierarchies, grouping strategies, storage layouts, and reference relationships may reveal 
+semantic information about scientific activities or operational processes. Likewise, 
+implementation-specific structures, such as chunk indexing formats or other internal metadata, 
+may disclose characteristics of the HDF5 library version or software implementation 
+used to create or process the file.
+
+Like scientific data and user-defined metadata, structural metadata may be exposed through 
+HDF5 applications or by direct examination of the binary file format without using HDF5 software.
+
+
+\paragraph{Derived and Reconstructed Information}
+
+Privacy-sensitive information in HDF5 may also arise through inference or reconstruction 
+from combinations of available data and metadata. Derived assets include relationships 
+inferred from multiple HDF5 datasets, external links, object references, 
+region references, virtual dataset (VDS) mappings, or information obtained by 
+combining HDF5 data with external sources. 
+These relationships may reveal information that is not explicitly represented within any single dataset or file.
+
+For example, correlating quality-control datasets with experimental observations, combining 
+temporal and spatial measurements, or reconstructing relationships across linked HDF5 files 
+may disclose sensitive characteristics that are not apparent when individual datasets 
+are examined in isolation. Consequently, privacy-sensitive assets extend beyond explicitly 
+stored data and metadata to include information that can be inferred through aggregation, 
+correlation, reconstruction, or other forms of analysis.
+
+\paragraph{Workflow and Applications Artifacts}
+
+Privacy-sensitive assets in HDF5 extend beyond data and metadata stored within HDF5 files 
+to include artifacts created by applications, processing workflows, and the surrounding 
+software ecosystem. These artifacts include command outputs (e.g., h5dump output), 
+diagnostic logs, temporary files, metadata snapshots, cached intermediate datasets, 
+conversion artifacts, and outputs generated by plugins or connectors 
+(e.g., binary files produced by an HDF5 VOL connector for another scientific data format).
+
+Examples include VFD SWMR metadata snapshots, cached intermediate results, diagnostic logs, 
+and metadata generated during translation between non-self-describing data formats and HDF5. 
+Such artifacts may expose scientific data, metadata, storage organization, workflow decisions, 
+or implementation details beyond what is contained in the original HDF5 file. 
+Because they are often created automatically, these artifacts may persist beyond their 
+intended lifetime and remain unnoticed by users focused primarily on the scientific datasets themselves.
+
+Scientific data processing workflows routinely enrich, restructure, annotate, and transform 
+datasets to improve interoperability, reproducibility, usability, or analytical value. 
+However, these processes may also introduce or preserve contextual information that was not intended for disclosure. 
+Automatically generated metadata, intermediate processing products, and derived datasets may 
+reveal experimental assumptions, workflow decisions, data provenance, software 
+implementation details, or scientific semantics that were absent from the original data. 
+Consequently, privacy exposure may arise not from malicious activity or unauthorized access, 
+but as an unintended consequence of routine scientific data processing.
 
 \subsection{HDF5 Tools}
 
