@@ -117,7 +117,7 @@ characteristics of HDF5 and the audit approach adopted in this document.
 
 \begin{itemize}
     \item \emph{HDF5 privacy primarily concerns accidental or unintended exposure of sensitive information
-          rather than malicious attacksi}. Malicious attacks and unauthorized access are primarily
+          rather than malicious attacks}. Malicious attacks and unauthorized access are primarily
           addressed through cybersecurity mechanisms and are outside the scope of this section.
     \item \emph{HDF5, by design, does not provide privacy protections}. When privacy is a concern, users and organizations
            are responsible for protecting data throughout the entire data lifecycle. In this document,
@@ -284,11 +284,14 @@ implementation details, or scientific semantics that were absent from the origin
 Consequently, privacy exposure may arise not from malicious activity or unauthorized access, 
 but as an unintended consequence of routine scientific data processing.
 
+
 \subsection{HDF5 Tools}
 
 Not strictly part of the core library, but the tools are an important part of the ecosystem and have their own set of issues.
 
 \subsection{Audit Findings and Mitigation Priorities}
+
+\subsubsection{Security and Safety}
 
 The blunt conclusion: HDF5’s CVE history is mostly malformed-file
 parsing pressure against a complex binary metadata machine.
@@ -1070,5 +1073,142 @@ untrusted profile test coverage & every release \\
 
 Track this in a public dashboard. Not because dashboards fix bugs. They stop the
 team from pretending that “more tests” is a plan.
+
+\subsubsection{Privacy}
+
+In this section we summarize privacy threats in HDF5 based on the audit findings and 
+describe mitigation strategies and their priorities.
+
+\paragraph{Overview of Privacy Threat Categories:}
+
+The HDF5 Privacy Exposure Model ~\cite{PVEM} identifies 
+seven categories of privacy threats that describe the principal mechanisms through which 
+sensitive information may be unintentionally exposed in HDF5. Privacy threats primarily 
+arise during normal scientific data creation, processing, sharing, and preservation. 
+They are a consequence of HDF5's self-describing data model, rich metadata capabilities, 
+extensible software architecture, broad interoperability across scientific applications, 
+and prolonged data life cycle.
+
+Several threat categories involve direct disclosure of information stored within HDF5 files. 
+Metadata Exposure (P1) occurs when descriptive information, such as object names, attributes, 
+datatype member names, or other user-defined metadata, reveals sensitive contextual 
+information even when the underlying scientific data are protected. Structural Metadata 
+Exposure (P2) arises from examination of HDF5's internal storage structures, 
+including file layout, storage organization, and implementation metadata, which may 
+disclose characteristics of the stored data without requiring HDF5 software. 
+Raw Data Exposure (P3) addresses situations in which information about scientific data 
+becomes observable through storage patterns, embedded textual descriptions, or 
+other implementation artifacts rather than through intended data access.
+
+Another group of threats results from routine scientific data processing. Unintended 
+Data Alteration or Inclusion (P4) occurs when software automatically generates, expands, 
+or preserves additional information during data conversion or processing. 
+Data Aggregation and Correlation (P5) recognizes that individually non-sensitive 
+datasets may collectively reveal sensitive information when combined or interpreted 
+together. Persistent Data Beyond Intended Usage (P6) addresses privacy risks 
+associated with temporary files, metadata snapshots, cached datasets, 
+archived copies, and other artifacts that remain accessible after their 
+intended purpose has ended.
+
+The remaining threat category Misplaced Trust in Privacy by format (P7) reflects broader 
+characteristics of modern HDF5 ecosystems. Examples include: 
+
+\begin{itemize}
+
+\item Misinterpretation of data privacy in HDF5 format leads to the possibility of 
+sensitive information disclosure through metadata, structural information, or inference.
+
+\item Conversion to HDF5 highlights that transforming legacy scientific formats 
+into HDF5 often increases accessibility and interoperability by making implicit 
+information explicit, but this additional semantic information may itself introduce new privacy risks. 
+
+\item Loss of Data Control describes situations in which data movement, replication, 
+backup, cloud migration, or transfer across organizational boundaries weakens the 
+original privacy protections and governance mechanisms applied to the data.
+
+\end{itemize}
+
+Although presented as distinct categories, these threats frequently occur together. 
+A single scientific workflow may enrich metadata during format conversion, aggregate 
+datasets from multiple sources, generate temporary processing artifacts, and 
+replicate results across multiple storage systems. Consequently, privacy risks should 
+be evaluated across the complete scientific data lifecycle rather than 
+by considering individual HDF5 files in isolation.
+
+\paragraph{Mitigation Priorities.}
+Because HDF5 was designed to maximize scientific data sharing, portability, 
+interoperability, and long-term usability rather than enforce privacy, 
+no single mechanism can eliminate all privacy risks. Effective privacy protection 
+therefore requires a multi-facet approach that considers the entire scientific data 
+lifecycle, including data creation, processing, storage, sharing, transfer, 
+and archival. Privacy should be treated as a property of the complete HDF5 ecosystem 
+including applications, plugins, workflows, storage systems, and organizational 
+practices rather than solely of the HDF5 file format. 
+Here we list mitigation strategies and their priorities.
+
+\paragraph{Priority 1: \emph{Privacy exposure awareness.}}
+Scientists, software developers, data stewards, and infrastructure providers should 
+recognize that HDF5's self-describing nature inherently exposes contextual 
+information in many ways. Privacy reviews should therefore evaluate not only 
+scientific datasets, but also metadata, structural organization, workflow artifacts, 
+derived products, and information that may be inferred through aggregation or 
+correlation. Reviews should also take into consideration possible privacy 
+exposure during data lifecycle. 
+
+\paragraph{Priority 2: \emph{Privacy exposure through HDF5 tools and plugins awareness.}}
+The HDF5 ecosystem extends beyond the core HDF5 software (i.e., file format and the library), 
+and includes a diverse collection of command-line utilities, visualization tools, 
+analysis libraries, VOL connectors, VFDs, filters, and third-party applications. 
+These components frequently generate additional outputs such as logs, diagnostic 
+messages, temporary files, metadata snapshots, converted datasets, and cached 
+intermediate results that may expose sensitive information beyond the contents of the 
+original HDF5 file. Furthermore, plugins may introduce new metadata, or transform 
+data in ways that alter their privacy characteristics. Consequently, privacy 
+assessments should evaluate not only HDF5 files but also the behavior of the 
+software ecosystem that processes them. Developers should document the privacy 
+implications of their tools, minimize unnecessary generation of sensitive artifacts, 
+and provide users with mechanisms to control logging, metadata generation, and 
+retention of intermediate products.
+
+\paragraph{Priority 3: \emph{Privacy-aware system design.}}
+HDF5 software systems should be built with data privacy in mind. Applications should 
+minimize collection and retention of unnecessary metadata, avoid embedding sensitive 
+information in object names or descriptive attributes, remove temporary processing 
+artifacts when they are no longer needed, and carefully evaluate automatically 
+generated metadata introduced during data conversion or interoperability. 
+Workflow designers should review intermediate products, logs, cached datasets, and 
+derived files before publication or long-term archival. 
+
+\paragraph{Priority 4: \emph{Data encryption as privacy control.}}
+Encryption represents an important but limited privacy control. 
+
+Currently, HDF5 doesn’t support data encryption that allows I/O on encrypted 
+data, effectively disabling sensitive data exposure during data 
+transfer and storage. Users may implement custom raw data encryption 
+and partial metadata encryption (i.e., names of the objects) using 
+existing HDF5 filtering mechanism. Such approach still leaves user-defined 
+metadata (e.g., attributes) and structural metadata unencrypted. Information 
+that remains unencrypted as application-specific workflow artifacts, 
+temporary files, system logs, or derived datasets may continue to 
+disclose sensitive information.
+  
+HDF5 encryption feature that properly implements encryption of all data 
+stored in HDF5 while allowing partial I/O on encrypted data is currently 
+under development. However, encryption does not eliminate all HDF5 privacy risks. 
+Once encrypted data are decrypted for legitimate processing, applications, 
+plugins, caches, diagnostic logs, and intermediate workflow products may again 
+become sources of unintended exposure. Encryption therefore reduces the attack 
+surface but does not address inference, aggregation, excessive metadata 
+generation, data retention, or loss of governance. Encryption also complicates 
+workflows and may lead to data loss if on some stage of data life cycle 
+encryption keys become unavailable.
+
+Therefore, encryption should be viewed as one component of a comprehensive 
+privacy strategy rather than as a complete solution. Effective protection 
+requires combining encryption with careful metadata management, lifecycle-aware 
+data governance, privacy-aware application design, access controls provided by 
+the underlying computing environment, and education of users regarding the 
+unique privacy characteristics of HDF5-based scientific data systems.
+
 
 \end{document}
