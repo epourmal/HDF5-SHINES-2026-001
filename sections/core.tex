@@ -289,6 +289,176 @@ but as an unintended consequence of routine scientific data processing.
 
 Not strictly part of the core library, but the tools are an important part of the ecosystem and have their own set of issues.
 
+\subsubsection{Privacy exposure through HDF5 command-line tools}
+
+HDF5 command-line tools provide convenient mechanisms for managing HDF5 files. 
+They can be used to display or extract raw data, and user-defined and structural 
+HDF5 metadata (e.g., \code{h5dump, h5ls, h5debug}), edit raw data and attributes with \code{h5edit}, 
+extract or aggregate data using \code{h5copy}, change characteristics of HDF5 objects, 
+for example, remove or add data filters and change storage properties using \code{h5repack}.
+ HDF5 command-line tools are routinely employed throughout the HDF5 data lifecycle. 
+While the command-line tools are essential for working with HDF5 data, they are ultimate 
+sources of unintended privacy exposure.
+
+The HDF5 tools were designed to ease access to HDF5 data, to reveal information about 
+the contents and organization of HDF5 files, and to manage that information while 
+avoiding steep learning curve of HDF5 programming. I.e., HDF5 command-line tools were 
+designed to expose HDF5 assets. Depending on the tool and the selected options, they may 
+display object names, attributes, datatype definitions, storage layouts, chunking parameters, 
+filter pipelines, external storage locations, object references, virtual dataset mappings, 
+and portions or all of the stored data to name a few. Even when users intend only to 
+verify file integrity or inspect metadata, command output may disclose information that 
+is considered sensitive in a particular context.
+
+Privacy exposure is not limited to information displayed on the terminal by \code{h5dump} or \code{h5ls}. 
+Command output is frequently redirected to files, incorporated into automated workflow logs, 
+attached to bug reports, archived as diagnostic information, or shared. The output can be used by 
+other tools (e.g., \code{h5import}) or applications to generate new data. Consequently, 
+metadata and scientific data extracted by HDF5 tools may persist outside the original HDF5 
+file and become accessible to individuals who were never intended to access the 
+underlying information.
+
+Several command-line tools may also create new HDF5 files or transform existing ones. \code{h5repack}
+ and \code{h5copy} may generate additional copies of data and/or aggregate data, modify 
+storage layouts, remove or add data filtering; \code{h5edit} 
+may modify and introduce new metadata, change raw data values and preserve information 
+that was not expected to be retained. I.e., the tools can alter the privacy 
+characteristics of the resulting files, particularly when they are incorporated into 
+larger workflows, backups, or public data repositories.
+
+Because HDF5 command-line tools are widely used in automated scripts, continuous 
+integration systems, and scientific workflows, their privacy implications should be 
+evaluated alongside those of the HDF5 library and HDF5-based applications. 
+The privacy mitigation strategies discussed in the next section apply not only to the 
+HDF5 library itself but also, and often to an even greater extent, to HDF5 command-line tools. 
+This is because these tools are designed to expose HDF5 assets and to generate 
+persistent outputs (e.g., new binary and text files). 
+
+The table below summarizes the assets exposed by the listed command-line tools.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\setlength{\LTleft}{-0.9in}
+\setlength{\LTright}{-0.9in}
+
+\begin{longtable}{@{}p{0.12\widetablewidth}p{0.22\widetablewidth}p{0.18\widetablewidth}p{0.48\widetablewidth}@{}}
+\caption{Privacy exposure through HDF5 command-line tools}
+\label{tab:hdf5-tools-privacy}\\
+\hline
+\textbf{Tool} &
+\textbf{Exposed assets} &
+\textbf{Workflow artifacts} &
+\textbf{Privacy considerations} \\
+\hline
+\endfirsthead
+
+\caption[]{Privacy exposure through HDF5 command-line tools, continued}\\
+\hline
+\textbf{Tool} &
+\textbf{Exposed assets} &
+\textbf{Workflow artifacts} &
+\textbf{Privacy considerations} \\
+\hline
+\endhead
+
+\hline
+\endfoot
+
+\texttt{h5dump} &
+Raw data; user-defined and structural metadata &
+Text dumps, redirected output, logs &
+Displays datasets, attributes, datatypes, storage layout, filter information, object references, and VDS mappings. May expose data stored in other HDF5 files through external links and Virtual Datasets (VDS). Output is frequently redirected to files or logs, creating persistent copies of sensitive information.\\
+\hline
+
+\texttt{h5ls} &
+User-defined and structural metadata (optionally raw data) &
+Terminal output, logs &
+Reveals object hierarchy, object names, datatypes, storage properties, links, and object relationships. With the \texttt{-d} option, also displays dataset values.\\
+\hline
+
+\texttt{h5repack} &
+Raw data; user-defined and structural metadata &
+New HDF5 file &
+Creates additional HDF5 copies while potentially modifying storage layout, filters, and metadata. The \texttt{--merge} option can aggregate datasets reachable through external links into a single file. May access non-HDF5 data through configured VFDs and VOL connectors.\\
+\hline
+
+\texttt{h5diff} &
+Raw data; user-defined metadata &
+Comparison reports &
+Reads and compares datasets and attributes. Reports may disclose sensitive values or structural differences.\\
+\hline
+
+\texttt{h5copy} &
+Raw data; user-defined and structural metadata &
+Additional HDF5 files &
+Copies objects within or between HDF5 files, increasing the number of persistent copies of sensitive information.\\
+\hline
+
+\texttt{h5stat} &
+Structural metadata &
+Statistics reports, logs &
+Reports object counts, storage statistics, chunk information, free space, and other implementation characteristics that may reveal dataset complexity or workflow properties.\\
+\hline
+
+\texttt{h5debug} &
+Structural metadata &
+Debug output &
+Displays low-level internal file structures, addresses, B-trees, heaps, chunk indexes, and other implementation metadata intended for debugging.\\
+\hline
+
+\texttt{h5watch} &
+Raw data; user-defined metadata &
+Monitoring output, logs &
+Monitors SWMR datasets and reports newly written data, timestamps, and update activity in real time.\\
+\hline
+
+\texttt{h5import} &
+Raw data; user-defined metadata &
+New HDF5 file &
+Imports external data into HDF5, creating additional copies while potentially preserving metadata and semantics from the source format.\\
+\hline
+
+\texttt{h5jam}/\texttt{h5unjam} &
+User block contents &
+Extracted or embedded files &
+Stores or extracts arbitrary information in the HDF5 user block, including scripts, XML documents, application metadata, or proprietary information.\\
+\hline
+
+\texttt{h5mkgrp} &
+Structural metadata &
+Modified HDF5 file &
+Creates or modifies the group hierarchy. Limited direct privacy exposure but changes descriptive metadata and namespace organization.\\
+\hline
+
+\texttt{h5edit} &
+Raw data; user-defined metadata &
+Modified HDF5 file &
+Creates or modifies attributes; modifies raw data. Limited direct privacy exposure but changes data and user-defined metadata.\\
+\hline
+
+\texttt{h5format\_convert} &
+Raw data; structural metadata &
+Converted HDF5 file &
+Converts files between HDF5 format versions, creating additional copies while preserving or rewriting internal metadata structures.\\
+\hline
+
+\texttt{h5clear} &
+Structural metadata &
+Modified HDF5 file &
+Clears SWMR status and metadata cache information. Primarily affects recovery metadata and file consistency information.\\
+
+\end{longtable}
+\endgroup
+
+\paragraph{Note:} All HDF5 command-line tools are built on top of the HDF5 library 
+and therefore inherit its capabilities. When VFDs or VOL connectors are configured, these 
+tools may transparently access data stored in remote services, external storage systems, 
+or non-HDF5 data sources exposed through connectors. Consequently, privacy exposure 
+is not necessarily limited to the HDF5 file specified on the command line but may extend to 
+the broader HDF5 ecosystem.
 \subsection{Audit Findings and Mitigation Priorities}
 
 \subsubsection{Security and Safety}
